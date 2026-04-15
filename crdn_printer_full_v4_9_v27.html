@@ -19,7 +19,7 @@ input,select,textarea,button{font-family:inherit}
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react" data-type="module">
-const {useState,useRef,useCallback,useEffect}=React;
+const {useState,useRef,useCallback,useEffect,useMemo}=React;
 
 const DOC_LABELS={"Credit Note":{party:"CREDIT TO",ref:"C/N",amount:"CREDIT"},"Debit Note":{party:"DEBIT TO",ref:"D/N",amount:"DEBIT"},"Receipt":{party:"RECEIVED FROM",ref:"RCPT",amount:"AMOUNT"},"Invoice":{party:"BILL TO",ref:"INV",amount:"AMOUNT"}};
 const DOC_TYPES=Object.keys(DOC_LABELS);
@@ -39,104 +39,6 @@ const addLog=(entry)=>{
   log.unshift({id:Date.now(),ts:new Date().toLocaleString(),...entry});
   if(log.length>1000)log.splice(1000);
   LS.set(KEYS.log,log);
-};
-
-// ── API INTEGRATION ──────────────────────────────────────────────────────────
-// API endpoint — change this URL when the backend is ready
-const API_ENDPOINT=""; // e.g. "https://your-server.com/api/documents"
-
-const buildApiPayload=(doc,company,bank,printedBy)=>{
-  const total=doc.items.reduce((s,it)=>s+(parseFloat(it.amount)||((parseFloat(String(it.rate).replace(/[^0-9.\-]/g,""))||0)*(parseFloat(it.unit)||1))),0);
-  return{
-    meta:{
-      appVersion:"4.9",
-      submittedAt:new Date().toISOString(),
-      submittedBy:printedBy,
-      source:"crdn_printer"
-    },
-    document:{
-      docNumber:doc.docNumber||"",
-      docType:doc.docType||"",
-      date:doc.date||"",
-    },
-    company:{
-      id:company.id,
-      name:company.name,
-      short:company.short,
-      abbr:company.abbr,
-    },
-    party:{
-      name:doc.party?.name||"",
-      address:doc.party?.address||"",
-    },
-    references:{
-      mbl:doc.mbl||"",
-      hbl:doc.hbl||"",
-      customerRef:doc.customerRef||"",
-    },
-    shipment:{
-      pol:doc.shipment?.pol||"",
-      vessel:doc.shipment?.vessel||"",
-      finalDest:doc.shipment?.finalDest||"",
-      etd:doc.shipment?.etd||"",
-      eta:doc.shipment?.eta||"",
-      shipper:doc.shipment?.shipper||"",
-      consignee:doc.shipment?.consignee||"",
-      shipMode:doc.shipment?.shipMode||"",
-      containerNo:doc.shipment?.containerNo||"",
-      packages:doc.shipment?.packages||"",
-      weight:doc.shipment?.weight||"",
-      cbm:doc.shipment?.cbm||"",
-    },
-    lineItems:doc.items.map((it,idx)=>({
-      line:idx+1,
-      description:it.desc||"",
-      unit:parseFloat(it.unit)||1,
-      currency:it.currency||"USD",
-      rate:it.rate||"",
-      amount:parseFloat(it.amount)||((parseFloat(String(it.rate).replace(/[^0-9.\-]/g,""))||0)*(parseFloat(it.unit)||1)),
-      remark:it.remark||"",
-    })),
-    totals:{
-      currency:doc.items[0]?.currency||"USD",
-      amount:parseFloat(total.toFixed(2)),
-    },
-    bankDetails:{
-      currency:bank.currency||"",
-      bankName:bank.name||"",
-      bankCode:bank.bankCode||"",
-      bankAddress:bank.address||"",
-      swift:bank.swift||"",
-      beneficiary:bank.beneficiary||"",
-      account:bank.account||"",
-    },
-  };
-};
-
-const submitToApi=async(payload)=>{
-  // ── Console output (always) ──
-  console.log("%c📤 CR/DN API Payload","color:#1e3a5f;font-weight:bold;font-size:14px");
-  console.log(JSON.stringify(payload,null,2));
-
-  // ── API call (only when endpoint is configured) ──
-  if(!API_ENDPOINT){
-    console.log("%c⚠️ API_ENDPOINT not configured — payload logged to console only","color:#f59e0b;font-weight:bold");
-    return{ok:true,mode:"console_only"};
-  }
-  try{
-    const resp=await fetch(API_ENDPOINT,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(payload),
-    });
-    if(!resp.ok)throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-    const data=await resp.json().catch(()=>({}));
-    console.log("%c✅ API response","color:#22c55e;font-weight:bold",data);
-    return{ok:true,mode:"api",data};
-  }catch(err){
-    console.error("❌ API submit failed:",err);
-    return{ok:false,mode:"api",error:err.message};
-  }
 };
 
 // ── USERS ────────────────────────────────────────────────────────────────────
@@ -327,6 +229,10 @@ const generatePDF=async(doc,co,bank)=>{
   t("TOTAL "+lbl.amount,W-M-48,y+3.5,6,"bold",[sr,sg,sb]);
   t(`${doc.items[0]?.currency||"USD"} ${fmtNum(total)}`,W-M-2,y+7.5,10,"bold",[pr,pg,pb],"right");
   y+=16;
+  if(isCreditNote(doc)){
+    t("This credit note will be applied against outstanding or future invoices.",M,y,7.5,"italic",[120,120,120]);
+    y+=8;
+  }
 
   // ── Push bank/sig to bottom ──
   const PAGE_H=297;
@@ -742,20 +648,23 @@ function DataMapper({srcData,mapping,setMapping,defaults,setDefaults,onProceed,o
 
 // ── SHIPMENT HELPER ───────────────────────────────────────────────────────────
 const shipHasData=s=>s&&Object.values(s).some(v=>v&&String(v).trim()!=="");
+const isCreditNote=doc=>doc?.docType==="Credit Note";
 
 // ── DOC LAYOUT (screen) ───────────────────────────────────────────────────────
-function DocLayout({doc,co,editable,onChange,companies}){
+const DocLayout=React.memo(function DocLayout({doc,co,editable,onChange,companies}){
   const lbl=DOC_LABELS[doc.docType]||DOC_LABELS["Credit Note"];
   const bank=getBankForDoc(doc,companies||BUILT_IN_COMPANIES);
   const total=doc.items.reduce((s,it)=>s+(parseFloat(it.amount)||((parseFloat(String(it.rate).replace(/[^0-9.\-]/g,""))||0)*(parseFloat(it.unit)||1))),0);
   const showShip=editable||shipHasData(doc.shipment);
-  const upd=(path,val)=>{if(!editable||!onChange)return;const parts=path.split(".");if(parts.length===1){onChange({...doc,[parts[0]]:val});return;}if(parts.length===2){onChange({...doc,[parts[0]]:{...doc[parts[0]],[parts[1]]:val}});return;}const next=JSON.parse(JSON.stringify(doc));let cur=next;for(let i=0;i<parts.length-1;i++)cur=cur[parts[i]];cur[parts[parts.length-1]]=val;onChange(next);};
+  const upd=(path,val)=>{if(!editable||!onChange)return;const parts=path.split(".");if(parts.length===1){onChange({...doc,[parts[0]]:val});}else if(parts.length===2){onChange({...doc,[parts[0]]:{...doc[parts[0]],[parts[1]]:val}});}else{const next={...doc};let cur=next;for(let i=0;i<parts.length-1;i++){cur[parts[i]]={...cur[parts[i]]};cur=cur[parts[i]];}cur[parts[parts.length-1]]=val;onChange(next);}};
   const updItem=(i,k,v)=>{if(!editable||!onChange)return;onChange({...doc,items:doc.items.map((it,j)=>j===i?{...it,[k]:v}:it)});};
+  const updItemMulti=(i,updates)=>{if(!editable||!onChange)return;onChange({...doc,items:doc.items.map((it,j)=>j===i?{...it,...updates}:it)});};
   const addItem=()=>{if(!editable||!onChange)return;onChange({...doc,items:[...doc.items,{desc:"",unit:"1",currency:doc.items[0]?.currency||"USD",rate:"",amount:"",remark:""}]});};
   const removeItem=i=>{if(!editable||!onChange)return;if(doc.items.length>1)onChange({...doc,items:doc.items.filter((_,j)=>j!==i)});};
-  const F=({path,type="text",placeholder="",style={}})=>{const val=path.split(".").reduce((o,k)=>o?.[k],doc)??"";if(!editable)return<span style={{fontSize:12,...style}}>{val||"—"}</span>;return<input type={type} value={val} placeholder={placeholder} onChange={e=>upd(path,e.target.value)} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 7px",fontSize:12,outline:"none",width:"100%",...style}}/>;};
+  const focusNext=e=>{if(e.key==="Enter"){e.preventDefault();const form=e.target.closest("[data-doclayout]");if(!form)return;const inputs=[...form.querySelectorAll("input,select")];const idx=inputs.indexOf(e.target);if(idx>=0&&idx<inputs.length-1){inputs[idx+1].focus();inputs[idx+1].select?.();}}};
+  const renderField=(path,type="text",placeholder="",style={})=>{const val=path.split(".").reduce((o,k)=>o?.[k],doc)??"";if(!editable)return<span style={{fontSize:12,...style}}>{val||"—"}</span>;return<input type={type} value={val} placeholder={placeholder} onChange={e=>upd(path,e.target.value)} onKeyDown={focusNext} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 7px",fontSize:12,outline:"none",width:"100%",...style}}/>;};;
   return(
-    <div style={{background:"#fff",fontFamily:"Arial,sans-serif",fontSize:12,color:"#1a1a1a",padding:"28px 36px",width:"100%"}}>
+    <div data-doclayout="true" style={{background:"#fff",fontFamily:"Arial,sans-serif",fontSize:12,color:"#1a1a1a",padding:"28px 36px",width:"100%"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:6}}>
         <div>{co.logo?<img src={co.logo} alt={co.abbr} style={{height:52,maxWidth:180,objectFit:"contain",objectPosition:"left center",display:"block"}}/>:<div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:48,height:48,borderRadius:6,background:co.secondary,display:"flex",alignItems:"center",justifyContent:"center",color:co.primary,fontWeight:900,fontSize:13}}>{co.abbr}</div><div style={{fontSize:14,fontWeight:700,color:co.secondary}}>{co.name}</div></div>}</div>
         <div style={{textAlign:"right",fontSize:22,fontWeight:700,color:co.primary,letterSpacing:1}}>{doc.docType.toUpperCase()}</div>
@@ -764,13 +673,13 @@ function DocLayout({doc,co,editable,onChange,companies}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 40px",marginBottom:14}}>
         <div>
           <div style={{fontSize:10,fontWeight:700,color:co.primary,textTransform:"uppercase",letterSpacing:0.6,marginBottom:5}}>{lbl.party}</div>
-          <F path="party.name" placeholder="Client / Company name" style={{fontWeight:700,fontSize:13,marginBottom:4}}/>
-          <div style={{height:editable?4:2}}/><F path="party.address" placeholder="Full address"/>
+          {renderField("party.name","text","Client / Company name",{fontWeight:700,fontSize:13,marginBottom:4})}
+          <div style={{height:editable?4:2}}/>{renderField("party.address","text","Full address")}
         </div>
         <div>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <tbody>{[["DATE","date","date"],[lbl.ref,"docNumber","text"],["MBL","mbl","text"],["HBL","hbl","text"],["CUSTOMER REF","customerRef","text"]].map(([l,p,t])=>(
-              <tr key={p}><td style={{padding:"3px 10px 3px 0",fontWeight:700,color:co.secondary,fontSize:11,whiteSpace:"nowrap",width:120,verticalAlign:"middle"}}>{l}:</td><td style={{padding:"3px 0",verticalAlign:"middle"}}><F path={p} type={t} placeholder={l}/></td></tr>
+              <tr key={p}><td style={{padding:"3px 10px 3px 0",fontWeight:700,color:co.secondary,fontSize:11,whiteSpace:"nowrap",width:120,verticalAlign:"middle"}}>{l}:</td><td style={{padding:"3px 0",verticalAlign:"middle"}}>{renderField(p,t,l)}</td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -779,7 +688,7 @@ function DocLayout({doc,co,editable,onChange,companies}){
         <div style={{background:co.secondary,color:"#fff",padding:"5px 12px",fontSize:10,fontWeight:700,letterSpacing:0.8,textTransform:"uppercase"}}>Shipment Details</div>
         <div style={{padding:"10px 12px",display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"8px 16px",background:"#fafafa"}}>
           {[["P.O.L","shipment.pol"],["Vessel / Voyage","shipment.vessel"],["Final Destination","shipment.finalDest"],["ETD","shipment.etd","date"],["ETA","shipment.eta","date"],["Packages (PCS)","shipment.packages"],["Shipper","shipment.shipper"],["Weight (KG)","shipment.weight"],["Measurement (CBM)","shipment.cbm"],["Ship Mode","shipment.shipMode"],["Container No.","shipment.containerNo"],["Consignee","shipment.consignee"]].map(([l,p,t="text"])=>(
-            <div key={p}><div style={{fontSize:9,fontWeight:700,color:co.secondary,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>{l}</div><F path={p} type={t} placeholder={l}/></div>
+            <div key={p}><div style={{fontSize:9,fontWeight:700,color:co.secondary,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>{l}</div>{renderField(p,t,l)}</div>
           ))}
         </div>
       </div>}
@@ -791,12 +700,12 @@ function DocLayout({doc,co,editable,onChange,companies}){
         </tr></thead>
         <tbody>{doc.items.map((it,i)=>(
           <tr key={i} style={{background:i%2?"#f9fafb":"#fff",borderBottom:"1px solid #e5e7eb"}}>
-            <td style={{padding:"6px 8px"}}>{editable?<input value={it.desc} onChange={e=>updItem(i,"desc",e.target.value)} placeholder="Description" style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 7px",fontSize:12,outline:"none",width:"100%"}}/>:<span>{it.desc||"—"}</span>}</td>
-            <td style={{padding:"6px 8px",textAlign:"right"}}>{editable?<input type="number" value={it.unit} onChange={e=>updItem(i,"unit",e.target.value)} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 4px",fontSize:12,outline:"none",width:"100%",textAlign:"right"}}/>:<span>{fmtNum(it.unit)}</span>}</td>
-            <td style={{padding:"6px 4px",textAlign:"center"}}>{editable?<select value={it.currency} onChange={e=>updItem(i,"currency",e.target.value)} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 2px",fontSize:11,outline:"none",width:"100%"}}>{CURRENCIES.map(c=><option key={c}>{c}</option>)}</select>:<span>{it.currency||"USD"}</span>}</td>
-            <td style={{padding:"6px 8px",textAlign:"right"}}>{editable?<input value={it.rate} onChange={e=>{const rv=e.target.value;const amt=((parseFloat(rv.replace(/[^0-9.\-]/g,""))||0)*(parseFloat(it.unit)||1)).toFixed(2);onChange({...doc,items:doc.items.map((x,j)=>j===i?{...x,rate:rv,amount:amt}:x)});}} placeholder="rate or %" style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 4px",fontSize:12,outline:"none",width:"100%",textAlign:"right"}}/>:<span>{it.rate||""}</span>}</td>
-            <td style={{padding:"6px 8px",textAlign:"right"}}>{editable?<input type="number" value={it.amount} onChange={e=>updItem(i,"amount",e.target.value)} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 4px",fontSize:12,outline:"none",width:"100%",textAlign:"right",fontWeight:700}}/>:<span style={{fontWeight:700}}>{fmtNum(it.amount)}</span>}</td>
-            <td style={{padding:"6px 8px"}}>{editable?<input value={it.remark} onChange={e=>updItem(i,"remark",e.target.value)} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 4px",fontSize:12,outline:"none",width:"100%"}}/>:<span>{it.remark||""}</span>}</td>
+            <td style={{padding:"6px 8px"}}>{editable?<input value={it.desc} onChange={e=>updItem(i,"desc",e.target.value)} onKeyDown={focusNext} placeholder="Description" style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 7px",fontSize:12,outline:"none",width:"100%"}}/>:<span>{it.desc||"—"}</span>}</td>
+            <td style={{padding:"6px 8px",textAlign:"right"}}>{editable?<input type="number" value={it.unit} onChange={e=>{const uv=e.target.value;if(it.rate){const amt=((parseFloat(String(it.rate).replace(/[^0-9.\-]/g,""))||0)*(parseFloat(uv)||1)).toFixed(2);updItemMulti(i,{unit:uv,amount:amt});}else{updItem(i,"unit",uv);}}} onKeyDown={focusNext} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 4px",fontSize:12,outline:"none",width:"100%",textAlign:"right"}}/>:<span>{fmtNum(it.unit)}</span>}</td>
+            <td style={{padding:"6px 4px",textAlign:"center"}}>{editable?<select value={it.currency} onChange={e=>updItem(i,"currency",e.target.value)} onKeyDown={focusNext} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 2px",fontSize:11,outline:"none",width:"100%"}}>{CURRENCIES.map(c=><option key={c}>{c}</option>)}</select>:<span>{it.currency||"USD"}</span>}</td>
+            <td style={{padding:"6px 8px",textAlign:"right"}}>{editable?<input value={it.rate} onChange={e=>{const rv=e.target.value;const amt=((parseFloat(rv.replace(/[^0-9.\-]/g,""))||0)*(parseFloat(it.unit)||1)).toFixed(2);updItemMulti(i,{rate:rv,amount:amt});}} onKeyDown={focusNext} placeholder="rate or %" style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 4px",fontSize:12,outline:"none",width:"100%",textAlign:"right"}}/>:<span>{it.rate||""}</span>}</td>
+            <td style={{padding:"6px 8px",textAlign:"right"}}>{editable?<input type="number" value={it.amount} onChange={e=>updItem(i,"amount",e.target.value)} onKeyDown={focusNext} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 4px",fontSize:12,outline:"none",width:"100%",textAlign:"right",fontWeight:700}}/>:<span style={{fontWeight:700}}>{fmtNum(it.amount)}</span>}</td>
+            <td style={{padding:"6px 8px"}}>{editable?<input value={it.remark} onChange={e=>updItem(i,"remark",e.target.value)} onKeyDown={focusNext} style={{border:"1px solid #d1d5db",borderRadius:5,padding:"5px 4px",fontSize:12,outline:"none",width:"100%"}}/>:<span>{it.remark||""}</span>}</td>
             {editable&&<td style={{padding:"6px 4px",textAlign:"center"}}>{doc.items.length>1&&<button onClick={()=>removeItem(i)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>}</td>}
           </tr>
         ))}</tbody>
@@ -808,6 +717,7 @@ function DocLayout({doc,co,editable,onChange,companies}){
           <div style={{fontSize:21,fontWeight:700,color:co.primary}}>{doc.items[0]?.currency||"USD"}&nbsp;&nbsp;{total.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
         </div>
       </div>
+      {isCreditNote(doc)&&<div style={{fontSize:11,color:"#9ca3af",fontStyle:"italic",textAlign:"right",marginBottom:8,marginTop:-8}}>This credit note will be applied against outstanding or future invoices.</div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:28,borderTop:`2px solid ${co.primary}`,paddingTop:14,marginTop:20}}>
         <div>
           <div style={{fontWeight:700,fontSize:10,color:co.secondary,textDecoration:"underline",letterSpacing:0.5,textTransform:"uppercase",marginBottom:10}}>Bank Account Info ({bank.currency})</div>
@@ -827,6 +737,106 @@ function DocLayout({doc,co,editable,onChange,companies}){
               <div style={{fontSize:10,color:"#6b7280",letterSpacing:0.5}}>Authorized Signature(s)</div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// ── HISTORY POPUP ─────────────────────────────────────────────────────────────
+function HistoryPopup({onClose}){
+  const[logs]=useState(()=>loadLog().filter(e=>e.type==="print"));
+  const[expandedId,setExpandedId]=useState(null);
+  const shipLabels={pol:"P.O.L",vessel:"Vessel / Voyage",finalDest:"Final Destination",etd:"ETD",eta:"ETA",packages:"Packages (PCS)",shipper:"Shipper",weight:"Weight (KG)",cbm:"CBM",shipMode:"Ship Mode",containerNo:"Container No.",consignee:"Consignee"};
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:"#fff",borderRadius:16,width:"100%",maxWidth:900,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px rgba(0,0,0,0.3)"}}>
+        <div style={{background:"#1e3a5f",borderRadius:"16px 16px 0 0",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{color:"#fff",fontWeight:800,fontSize:16}}>📋 Document History</span>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <span style={{color:"rgba(255,255,255,0.7)",fontSize:12}}>{logs.length} record(s)</span>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",borderRadius:6,padding:"4px 14px",cursor:"pointer",fontWeight:700}}>✕ Close</button>
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:0}}>
+          {logs.length===0
+            ?<div style={{textAlign:"center",padding:"60px 20px",color:"#9ca3af"}}>
+              <div style={{fontSize:40,marginBottom:12}}>📭</div>
+              <div style={{fontSize:15,fontWeight:600}}>No documents printed yet</div>
+              <div style={{fontSize:13,marginTop:4}}>Documents will appear here after you save a PDF.</div>
+            </div>
+            :<table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{background:"#f1f5f9",position:"sticky",top:0,zIndex:1}}>
+                {["Doc #","Type","Date","Client","Currency","Total","Printed By","Printed At",""].map(h=>
+                  <th key={h} style={{padding:"9px 10px",textAlign:"left",fontWeight:700,fontSize:11,color:"#374151",textTransform:"uppercase",letterSpacing:0.3,borderBottom:"2px solid #e5e7eb"}}>{h}</th>
+                )}
+              </tr></thead>
+              <tbody>{logs.map((e,i)=>{
+                const isExpanded=expandedId===e.id;
+                const ship=e.shipment||{};
+                const items=e.items||[];
+                const hasShip=Object.values(ship).some(v=>v&&String(v).trim());
+                return(<React.Fragment key={e.id}>
+                  <tr style={{background:i%2?"#f9fafb":"#fff",borderBottom:"1px solid #f3f4f6",cursor:"pointer"}} onClick={()=>setExpandedId(isExpanded?null:e.id)}>
+                    <td style={{padding:"8px 10px",fontWeight:700,color:"#1e3a5f"}}>{e.docNumber||"—"}</td>
+                    <td style={{padding:"8px 10px"}}>{e.docType||"—"}</td>
+                    <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>{e.date||"—"}</td>
+                    <td style={{padding:"8px 10px",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.client||"—"}</td>
+                    <td style={{padding:"8px 10px"}}>{e.currency||"—"}</td>
+                    <td style={{padding:"8px 10px",fontWeight:600}}>{e.total?fmtNum(e.total):"—"}</td>
+                    <td style={{padding:"8px 10px",color:"#6b7280"}}>{e.user||"—"}</td>
+                    <td style={{padding:"8px 10px",color:"#6b7280",whiteSpace:"nowrap",fontSize:11}}>{e.ts||"—"}</td>
+                    <td style={{padding:"8px 10px",color:"#9ca3af",fontSize:14}}>{isExpanded?"▲":"▼"}</td>
+                  </tr>
+                  {isExpanded&&<tr><td colSpan={9} style={{padding:0,background:"#f8fafc",borderBottom:"2px solid #e5e7eb"}}>
+                    <div style={{padding:"14px 20px"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 40px",marginBottom:14}}>
+                        <div>
+                          <div style={{fontSize:10,fontWeight:700,color:"#3a7bd5",textTransform:"uppercase",marginBottom:6}}>Party Details</div>
+                          <div style={{fontSize:13,fontWeight:700,color:"#1a1a1a"}}>{e.client||"—"}</div>
+                          <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{e.clientAddress||"—"}</div>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,fontWeight:700,color:"#3a7bd5",textTransform:"uppercase",marginBottom:6}}>References</div>
+                          <div style={{display:"grid",gridTemplateColumns:"100px 1fr",gap:"3px 8px",fontSize:12}}>
+                            {[["Date",e.date],["Doc #",e.docNumber],["MBL",e.mbl],["HBL",e.hbl],["Customer Ref",e.customerRef],["Company",e.companyName]].filter(([,v])=>v).map(([l,v])=>
+                              <React.Fragment key={l}><span style={{fontWeight:700,color:"#374151"}}>{l}:</span><span>{v}</span></React.Fragment>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {hasShip&&<div style={{marginBottom:14}}>
+                        <div style={{fontSize:10,fontWeight:700,color:"#3a7bd5",textTransform:"uppercase",marginBottom:6}}>Shipment Details</div>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px 16px",background:"#fff",borderRadius:8,padding:"10px 12px",border:"1px solid #e5e7eb"}}>
+                          {Object.entries(shipLabels).map(([k,l])=>{const v=ship[k];return v?<div key={k}><div style={{fontSize:9,fontWeight:700,color:"#6b7280",textTransform:"uppercase"}}>{l}</div><div style={{fontSize:12,marginTop:1}}>{v}</div></div>:null;}).filter(Boolean)}
+                        </div>
+                      </div>}
+                      {items.length>0&&<div>
+                        <div style={{fontSize:10,fontWeight:700,color:"#3a7bd5",textTransform:"uppercase",marginBottom:6}}>Line Items</div>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,background:"#fff",borderRadius:8,overflow:"hidden",border:"1px solid #e5e7eb"}}>
+                          <thead><tr style={{background:"#1e3a5f"}}>
+                            {["Description","Unit","Currency","Rate","Amount","Remark"].map(h=>
+                              <th key={h} style={{padding:"6px 8px",color:"#fff",textAlign:["Rate","Amount"].includes(h)?"right":"left",fontWeight:700,fontSize:10}}>{h}</th>
+                            )}
+                          </tr></thead>
+                          <tbody>{items.map((it,ii)=>
+                            <tr key={ii} style={{background:ii%2?"#f9fafb":"#fff",borderBottom:"1px solid #f3f4f6"}}>
+                              <td style={{padding:"5px 8px"}}>{it.desc||"—"}</td>
+                              <td style={{padding:"5px 8px",textAlign:"right"}}>{fmtNum(it.unit)}</td>
+                              <td style={{padding:"5px 8px"}}>{it.currency||"USD"}</td>
+                              <td style={{padding:"5px 8px",textAlign:"right"}}>{it.rate||""}</td>
+                              <td style={{padding:"5px 8px",textAlign:"right",fontWeight:700}}>{fmtNum(it.amount)}</td>
+                              <td style={{padding:"5px 8px",color:"#6b7280"}}>{it.remark||""}</td>
+                            </tr>
+                          )}</tbody>
+                        </table>
+                      </div>}
+                    </div>
+                  </td></tr>}
+                </React.Fragment>);
+              })}</tbody>
+            </table>
+          }
         </div>
       </div>
     </div>
@@ -852,6 +862,7 @@ function App(){
   const[loading,setLoading]=useState(false);
   const[pdfProgress,setPdfProgress]=useState(null);
   const[postPrintData,setPostPrintData]=useState(null);
+  const[showHistory,setShowHistory]=useState(false);
   const fileRef=useRef();
 
   const getCompany=id=>companies.find(c=>c.id===id)||companies[0];
@@ -872,6 +883,15 @@ function App(){
   const startSingle=()=>{setMode("single");setDocs([emptyDoc(singleCompany,singleDocType)]);setActiveIdx(0);setScreen("preview");};
   const goBack=()=>setScreen(mode==="single"?"ops":"map");
 
+  // ── Stable onChange for DocLayout (prevents focus loss on re-render) ──
+  const docChangeHandlers=useRef({});
+  const getDocChangeHandler=useCallback((i)=>{
+    if(!docChangeHandlers.current[i]){
+      docChangeHandlers.current[i]=nd=>setDocs(prev=>prev.map((x,j)=>j===i?nd:x));
+    }
+    return docChangeHandlers.current[i];
+  },[]);
+
   // ── PDF helpers ──────────────────────────────────────────────────────────
   const savePDF=async(doc,co)=>{
     const bank=getBankForDoc(doc,companies);
@@ -880,13 +900,13 @@ function App(){
     const fname=`${(doc.docNumber||"document").replace(/[^a-zA-Z0-9\-_]/g,"_")}.pdf`;
     downloadBlob(blob,fname);
     const total=doc.items.reduce((s,i)=>s+(parseFloat(i.amount)||0),0).toFixed(2);
-    addLog({type:"print",user:currentUser,docNumber:doc.docNumber,docType:doc.docType,client:doc.party?.name||"",currency:doc.items[0]?.currency||"",total,detail:`${currentUser} printed ${doc.docNumber}`});
-    // ── API submission ──
-    const payload=buildApiPayload(doc,co,bank,currentUser);
-    const apiResult=await submitToApi(payload);
-    if(apiResult.mode==="api"&&!apiResult.ok){
-      alert(`⚠️ PDF saved successfully, but API submission failed:\n${apiResult.error}\n\nPayload has been logged to browser console.`);
-    }
+    addLog({type:"print",user:currentUser,docNumber:doc.docNumber,docType:doc.docType,
+      client:doc.party?.name||"",clientAddress:doc.party?.address||"",
+      currency:doc.items[0]?.currency||"",total,
+      date:doc.date,mbl:doc.mbl,hbl:doc.hbl,customerRef:doc.customerRef,
+      companyId:doc.companyId,companyName:co.name,
+      shipment:doc.shipment||{},items:doc.items||[],
+      detail:`${currentUser} printed ${doc.docNumber}`});
   };
 
   const handleSinglePDF=async()=>{
@@ -921,9 +941,6 @@ function App(){
           client:doc.party?.name||"",currency:doc.items[0]?.currency||"",
           total:doc.items.reduce((s,it)=>s+(parseFloat(it.amount)||0),0).toFixed(2),
           detail:`${currentUser} printed ${doc.docNumber}`});
-        // ── API submission (batch) ──
-        const payload=buildApiPayload(doc,co,bank,currentUser);
-        await submitToApi(payload);
       }catch(err){
         console.error(`Error generating ${doc.docNumber}:`,err);
         errors.push(`${doc.docNumber}: ${err.message}`);
@@ -965,6 +982,7 @@ function App(){
   if(screen==="ops") return(
     <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
       {showMaint&&<Maintenance companies={companies} setCompanies={setCompanies} fx={fx} setFx={setFx} onClose={()=>setShowMaint(false)}/>}
+      {showHistory&&<HistoryPopup onClose={()=>setShowHistory(false)}/>}
       <div style={{background:"#fff",borderRadius:18,boxShadow:"0 8px 40px rgba(0,0,0,0.3)",padding:40,maxWidth:600,width:"100%"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{fontSize:24,fontWeight:900,color:"#1e3a5f"}}>Credit / Debit Note Printer</div>
@@ -1011,6 +1029,7 @@ function App(){
           </div>
         )}
         <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>setShowHistory(true)} style={{flex:1,padding:"9px",borderRadius:8,border:"1px solid #d1d5db",background:"#fff",color:"#374151",cursor:"pointer",fontWeight:600,fontSize:13}}>📋 History</button>
           <button onClick={()=>setShowMaint(true)} style={{flex:1,padding:"9px",borderRadius:8,border:"1px solid #d1d5db",background:"#fff",color:"#374151",cursor:"pointer",fontWeight:600,fontSize:13}}>⚙️ Maintenance</button>
           <button onClick={()=>setCurrentUser(null)} style={{padding:"9px 16px",borderRadius:8,border:"1px solid #e5e7eb",background:"#f9fafb",color:"#6b7280",cursor:"pointer",fontWeight:600,fontSize:13}}>Sign Out</button>
         </div>
@@ -1077,7 +1096,7 @@ function App(){
         <div style={{padding:24}}>
           {docs.map((d,i)=>(
             <div key={i} style={{display:i===activeIdx?"block":"none",background:"#fff",borderRadius:14,boxShadow:"0 2px 16px rgba(0,0,0,0.08)",marginBottom:24,overflow:"hidden"}}>
-              <DocLayout doc={d} co={getCompany(d.companyId)} editable={isSingle} onChange={isSingle?nd=>setDocs(prev=>prev.map((x,j)=>j===i?nd:x)):undefined} companies={companies}/>
+              <DocLayout doc={d} co={getCompany(d.companyId)} editable={isSingle} onChange={isSingle?getDocChangeHandler(i):undefined} companies={companies}/>
             </div>
           ))}
         </div>
