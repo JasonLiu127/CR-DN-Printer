@@ -1,0 +1,2754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 智能账单引擎 - 浅色纯净版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        tech: { primary: '#0052FF', light: '#Eef2FF', border: '#D1D5DB', text: '#111827', muted: '#6B7280' }
+                    },
+                    boxShadow: { 'glow': '0 0 15px rgba(0, 82, 255, 0.3)' }
+                }
+            }
+        }
+    </script>
+    <!-- XLSX 库:多 CDN 兜底加载,确保在任何网络环境下都能成功载入 -->
+    <script>
+        (function loadXLSX() {
+            const cdnList = [
+                'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+                'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+                'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+                'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'
+            ];
+            let idx = 0;
+            function tryLoad() {
+                if (idx >= cdnList.length) {
+                    console.error('所有 XLSX CDN 均加载失败,请检查网络连接');
+                    alert('XLSX 核心库加载失败,请检查网络连接后刷新页面重试。');
+                    return;
+                }
+                const s = document.createElement('script');
+                s.src = cdnList[idx];
+                s.onload = () => console.log('XLSX 已加载:', cdnList[idx]);
+                s.onerror = () => { idx++; tryLoad(); };
+                document.head.appendChild(s);
+            }
+            tryLoad();
+        })();
+    </script>
+    <style>
+        body { background-color: #F8FAFC; color: #0F172A; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .glass-panel { background: #ffffff; border: 1px solid rgba(226, 232, 240, 0.8); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05); }
+        .step-container { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .hidden-step { display: none; opacity: 0; transform: scale(0.98); }
+        .active-step { display: block; opacity: 1; transform: scale(1); animation: enterStep 0.5s ease-out forwards; }
+        @keyframes enterStep { from { opacity: 0; transform: translateY(10px) scale(0.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        
+        .ai-thinking-overlay { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 50; border-radius: inherit; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        .ai-thinking-overlay.active { opacity: 1; pointer-events: all; }
+        .brain-glow { animation: pulseBlue 1.5s infinite alternate; color: #0052FF; }
+        @keyframes pulseBlue { from { filter: drop-shadow(0 0 2px rgba(0,82,255,0.4)); transform: scale(1); } to { filter: drop-shadow(0 0 12px rgba(0,82,255,0.8)); transform: scale(1.05); } }
+        .typewriter:after { content: '|'; animation: blink 1s step-end infinite; color: #0052FF; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .log-enter { animation: slideInLog 0.3s ease-out forwards; }
+        @keyframes slideInLog { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        .tech-input { background: #F8FAFC; border: 1px solid #E2E8F0; color: #1E293B; border-radius: 6px; padding: 0.5rem 0.75rem; width: 100%; transition: all 0.2s; font-size: 0.875rem; }
+        .tech-input:focus { outline: none; border-color: #0052FF; box-shadow: 0 0 0 3px rgba(0, 82, 255, 0.1); background: #ffffff; }
+        .tech-label { display: block; font-size: 0.75rem; color: #64748B; margin-bottom: 0.3rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+        .readonly-field { background: #F1F5F9; color: #94A3B8; cursor: not-allowed; border-color: #E2E8F0; }
+        .expand-anim { animation: expandDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes expandDown { from { opacity: 0; max-height: 0; transform: translateY(-10px); overflow: hidden; } to { opacity: 1; max-height: 200px; transform: translateY(0); } }
+        .radar-spinner { border-top-color: #0052FF; border-left-color: rgba(0,82,255,0.2); border-right-color: rgba(0,82,255,0.2); border-bottom-color: rgba(0,82,255,0.2); }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex flex-col items-center selection:bg-blue-100 selection:text-blue-900">
+
+    <header class="w-full max-w-6xl flex justify-between items-center mb-10 pb-4">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-50 p-2 rounded-lg relative overflow-hidden">
+                <div class="absolute inset-0 bg-blue-100 opacity-20 animate-pulse"></div>
+                <svg class="w-7 h-7 text-tech-primary relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight text-gray-900 flex items-center">
+                账单生成中枢 
+                <span class="text-[10px] text-tech-primary ml-3 bg-blue-50 px-2 py-0.5 rounded-full font-bold border border-blue-100 flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>
+                    AI Engine Active
+                </span>
+            </h1>
+        </div>
+        <div class="flex items-center gap-3 text-sm font-medium">
+            <span id="nav-1" class="text-tech-primary bg-blue-50 px-3 py-1 rounded-full">01 数据摄入</span>
+            <span class="text-gray-300">/</span>
+            <span id="nav-2" class="text-gray-400">02 AI 分析与映射</span>
+            <span class="text-gray-300">/</span>
+            <span id="nav-3" class="text-gray-400">03 核心写入</span>
+        </div>
+    </header>
+
+    <div class="w-full max-w-6xl relative">
+        
+        <!-- AI 思考遮罩 -->
+        <div id="aiOverlay" class="ai-thinking-overlay rounded-2xl shadow-2xl">
+            <svg class="w-16 h-16 mb-4 brain-glow" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+            <h2 id="aiStatusText" class="text-xl font-bold text-gray-800 typewriter tracking-wide">AI 大模型引擎已激活...</h2>
+            <div class="mt-6 w-80 bg-gray-50/80 rounded-lg p-3 border border-gray-200 shadow-inner text-left h-28 overflow-hidden relative">
+                <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-gray-50 to-transparent z-10 pointer-events-none"></div>
+                <ul id="aiLogList" class="text-xs font-mono text-gray-500 space-y-2 transition-transform duration-300"></ul>
+            </div>
+            <div class="w-80 h-1 bg-gray-100 rounded-full mt-4 overflow-hidden">
+                <div class="h-full bg-tech-primary shadow-glow animate-[pulse_1.5s_ease-in-out_infinite]" style="width: 85%;"></div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-8 step-container min-h-[600px] relative overflow-hidden">
+            <div class="absolute -top-40 -right-40 w-96 h-96 bg-blue-50 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
+            
+            <!-- ================= 第一步：数据摄入 ================= -->
+            <div id="step-1" class="active-step relative z-10">
+                <div class="mb-8 flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">上传结构化明细</h2>
+                        <p class="text-gray-500 text-sm mt-1">支持多行复杂数据结构，系统内置 <strong class="text-blue-600">AI 语义分析算法</strong>，自动提取费用节点。</p>
+                    </div>
+                    <button onclick="downloadTemplate()" class="flex items-center gap-2 text-sm font-bold text-tech-primary bg-blue-50 hover:bg-blue-100 border border-blue-200 px-4 py-2.5 rounded-lg transition-colors shadow-sm">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        下载参考模板
+                    </button>
+                </div>
+                
+                <div class="border-2 border-dashed border-blue-200 hover:border-tech-primary hover:bg-blue-50/50 rounded-xl p-16 text-center transition-all relative group cursor-pointer bg-gray-50/50">
+                    <input type="file" id="fileUpload" accept=".csv, .xlsx, .xls" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                    <div class="bg-white w-16 h-16 rounded-full shadow-sm flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                        <svg class="h-8 w-8 text-tech-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                    </div>
+                    <p class="text-lg text-gray-700 font-semibold">点击或拖拽文件至扫描区</p>
+                    <p class="text-sm text-gray-400 mt-1">自动识别表头 · 智能拆分多行明细</p>
+                </div>
+
+                <div id="previewArea" class="mt-8 hidden">
+                    <div class="flex justify-between items-center mb-4 border-t border-gray-100 pt-6">
+                        <div class="flex items-center gap-2">
+                            <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span>
+                            <h3 class="text-sm text-gray-700 font-bold">矩阵数据提取成功 (前3行预览)</h3>
+                        </div>
+                        <button onclick="triggerAIPhase1()" class="bg-tech-primary hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition shadow-md hover:shadow-lg text-sm flex items-center gap-2">
+                            调用大模型进行数据推理 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
+                        <table class="min-w-full text-sm text-left text-gray-600 whitespace-nowrap">
+                            <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-200" id="tableHead"></thead>
+                            <tbody id="tableBody" class="divide-y divide-gray-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= 第二步：深度分析与映射 ================= -->
+            <div id="step-2" class="hidden-step relative z-10">
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900">AI 智能策略构建区</h2>
+                    <p class="text-gray-500 text-sm mt-1">系统已完成 <strong class="text-green-600">98.4%</strong> 的核心参数匹配，并从 Ragic 同步了专属数据字典。</p>
+                </div>
+
+                <!-- 1. 开票策略 -->
+                <div class="bg-blue-50/60 border border-blue-100 rounded-xl p-6 mb-6 shadow-sm">
+                    <h3 class="text-tech-primary text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        Document Strategy (AI 推荐策略)
+                    </h3>
+                    
+                    <div class="flex flex-wrap gap-6 items-start">
+                        <div class="flex-1 min-w-[200px]">
+                            <label class="tech-label text-tech-primary">开票类型</label>
+                            <select class="tech-input font-bold text-gray-800 bg-white border-blue-200 focus:ring-blue-100">
+                                <option value="DN">Debit Note (DN - 客户应收)</option>
+                                <option value="CN">Credit Note (CN - 供应商应付)</option>
+                            </select>
+                        </div>
+                        <div class="flex-1 min-w-[250px]">
+                            <label class="tech-label text-tech-primary">智能开票方式</label>
+                            <select id="invoiceMethodSelect" class="tech-input font-bold text-gray-800 bg-white border-blue-200 focus:ring-blue-100" onchange="toggleSplitField()">
+                                <option value="merge">智能合并生成单张账单</option>
+                                <option value="split">基于唯一字段拆分多张账单</option>
+                                <option value="individual">单项独立开票 (每笔明细生成独立账单)</option>
+                            </select>
+                        </div>
+                        <div id="splitFieldContainer" class="flex-1 min-w-[220px] hidden">
+                            <label class="tech-label text-orange-600 flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>
+                                拆分依据字段
+                            </label>
+                            <div class="relative">
+                                <select id="splitFieldSelect" class="tech-input bg-white border-orange-200 focus:border-orange-500 focus:ring-orange-100 font-medium pr-10" onchange="onSplitFieldChange()"></select>
+                                <span id="splitFieldBadge" class="hidden absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200">
+                                    <svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                    <span id="splitFieldBadgeText">已选</span>
+                                </span>
+                            </div>
+                            <p id="splitFieldHint" class="hidden text-[11px] text-orange-600 mt-1">⚠ 尚未上传附件,请先完成第一步</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 全局参数 (调整：Payee 移至收账单方) -->
+                <div class="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
+                    <h3 class="text-gray-800 text-sm font-bold uppercase tracking-wider mb-5 flex items-center gap-2 pb-3 border-b border-gray-100">
+                        <svg class="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"></path></svg>
+                        Global Parameters (全局基础设置)
+                    </h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                        
+                        <!-- 左栏：收账单方 (Payee 可搜索下拉,联动填充 Bill to/Attn/Tel) -->
+                        <div class="space-y-4 bg-gray-50 p-5 rounded-lg border border-gray-200 shadow-inner">
+                            <div class="text-xs font-bold text-gray-400 mb-1 tracking-wider border-b border-gray-200 pb-2">收账单方 / 客户 (INVOICE RECEIVER)</div>
+                            
+                            <!-- Payee:点击弹框选择 -->
+                            <div class="relative">
+                                <label class="tech-label text-red-500 flex items-center justify-between">
+                                    <span>* Payee (收款方)</span>
+                                    <span id="payeeStatus" class="text-[10px] text-gray-400 normal-case tracking-normal font-normal"></span>
+                                </label>
+                                <div class="relative">
+                                    <input type="text" id="payeeInput" readonly
+                                        class="tech-input font-medium text-gray-900 border-gray-300 pr-9 bg-white cursor-pointer"
+                                        placeholder="点击打开收款方列表" onclick="openPayeeModal()">
+                                    <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </div>
+                                <input type="hidden" id="payeeSelected" value="">
+                            </div>
+                            
+                            <div>
+                                <label class="tech-label text-blue-600">Bill to (客户/付款方)</label>
+                                <input type="text" id="customerSelect" class="tech-input readonly-field font-medium" value="" placeholder="选择 Payee 后自动填充" readonly>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div><label class="tech-label">Tel</label><input type="text" id="payeeTel" class="tech-input readonly-field" value="" placeholder="自动填充" readonly></div>
+                                <div><label class="tech-label">Attn</label><input type="text" id="payeeAttn" class="tech-input readonly-field" value="" placeholder="自动填充" readonly></div>
+                            </div>
+                        </div>
+
+                        <!-- 中栏：银行账户信息 -->
+                        <div class="space-y-4 bg-blue-50/40 p-5 rounded-lg border border-blue-200 relative shadow-sm">
+                            <div class="absolute -right-2 -top-2 bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded font-bold border border-blue-200 shadow-sm">AI 联动感知</div>
+                            <div class="text-xs font-bold text-blue-500 mb-1 tracking-wider border-b border-blue-100 pb-2">发账单方 / 账户 (BANK INFO)</div>
+                            
+                            <div>
+                                <label class="tech-label text-tech-primary">Bank ID</label>
+                                <div class="relative">
+                                    <input type="text" id="bankIdInput" readonly
+                                        class="tech-input border-blue-300 focus:border-tech-primary focus:ring-blue-200 font-bold text-gray-800 bg-white cursor-pointer pr-9"
+                                        placeholder="点击打开银行账户列表" onclick="openBankModal()">
+                                    <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    <input type="hidden" id="bankIdSelect" value="">
+                                </div>
+                            </div>
+                            <div><label class="tech-label">Swift Code</label><input type="text" id="swiftCode" class="tech-input readonly-field bg-white/60" placeholder="选择 Bank 后自动填充" readonly></div>
+                            <div><label class="tech-label">Account / Routing No.</label><input type="text" id="accNo" class="tech-input readonly-field bg-white/60" placeholder="选择 Bank 后自动填充" readonly></div>
+                        </div>
+
+                        <!-- 右栏：业务属性 -->
+                        <div class="space-y-4 bg-white p-5 rounded-lg border border-gray-200">
+                            <div class="text-xs font-bold text-gray-400 mb-1 tracking-wider border-b border-gray-100 pb-2">业务属性 (BUSINESS ATTR.)</div>
+                            <div><label class="tech-label text-red-500">* 业务部门</label><select id="deptSelect" class="tech-input" onmousedown="ensureDepartments()" onfocus="ensureDepartments()"><option value="">点击此处加载部门列表</option></select></div>
+                            <div><label class="tech-label text-red-500">* 服务地</label><select id="serviceAreaSelect" class="tech-input" onmousedown="ensureServiceAreas()" onfocus="ensureServiceAreas()"><option value="">点击此处加载服务地列表</option></select></div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div><label class="tech-label text-red-500">* 客户组</label><select id="customerGroupSelect" class="tech-input" onmousedown="ensureCustomerGroups()" onfocus="ensureCustomerGroups()"><option value="">点击此处加载客户组列表</option></select></div>
+                                <div><label class="tech-label">部门审批</label><input type="text" class="tech-input readonly-field" value="Ivy Lian" readonly></div>
+                                <div>
+                                    <label class="tech-label text-red-500">* 开票汇率索引</label>
+                                    <div class="relative">
+                                        <input type="text" id="invoiceExRateIndex" readonly
+                                            class="tech-input bg-white cursor-pointer pr-9"
+                                            placeholder="点击打开汇率索引列表" onclick="openExRateModal()">
+                                        <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    </div>
+                                </div>
+                                <div><label class="tech-label text-red-500">* Cus Ref. Code</label><input type="text" id="cusRefCode" class="tech-input" placeholder="请输入客户参考编码" autocomplete="off"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 表头映射 (动态映射次数展示) -->
+                <div class="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
+                    <div class="flex justify-between items-center mb-5 pb-3 border-b border-gray-100">
+                        <h3 class="text-gray-800 text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                            <svg class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            Semantic Mapping (结构特征映射池)
+                        </h3>
+                    </div>
+                    <div class="max-h-80 overflow-y-auto pr-2 rounded-lg border border-gray-100">
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="sticky top-0 bg-gray-50 text-gray-500 text-xs uppercase z-10 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-5 py-3 w-1/2">系统目标节点 (Ragic Target)</th>
+                                    <th class="px-5 py-3 w-1/2">来源特征表头 (Extracted Feature) <span class="ml-2 text-xs text-blue-500 font-normal lowercase tracking-widest bg-blue-50 px-2 py-0.5 rounded border border-blue-100">dynamic mapping count</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="mappingBody" class="divide-y divide-gray-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 4. Charge Code 映射 (动态映射次数展示) -->
+                <div class="bg-purple-50/30 border border-purple-100 rounded-xl p-6 mb-6 shadow-sm" id="chargeCodeSection" style="display: none;">
+                    <div class="flex justify-between items-center mb-5 pb-3 border-b border-purple-100/50">
+                        <h3 class="text-purple-800 text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                            <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>
+                            Charge Code Mapping (智能费用编码映射)
+                        </h3>
+                        <div class="flex items-center gap-2 bg-purple-100 px-3 py-1 rounded-full border border-purple-200">
+                            <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
+                            <span class="text-xs text-purple-800 font-bold" id="customerDictStatus">已挂载当前客户 Ragic 字典</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-4">请将提取的独立费用明细，正确映射至标准 Charge Code。带有 <span class="text-red-500 font-bold">*</span> 号的节点为必填项。</p>
+                    
+                    <div class="max-h-80 overflow-y-auto pr-2 rounded-lg border border-gray-200">
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="sticky top-0 bg-gray-50 text-gray-500 text-xs uppercase z-10 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-5 py-3 w-1/2">提取到的业务明细费用名称</th>
+                                    <th class="px-5 py-3 w-1/2">
+                                        <span class="text-red-500 font-bold">*</span> Ragic 标准 Charge Code 
+                                        <span class="ml-1 text-[10px] bg-red-50 text-red-500 border border-red-100 px-1.5 py-0.5 rounded font-normal">必填</span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="chargeCodeBody" class="divide-y divide-gray-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex justify-between mt-8 border-t border-gray-200 pt-6">
+                    <button onclick="changeStep(1)" class="text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition text-sm font-medium px-5 py-2.5 rounded-lg border border-gray-200">← 中止进程并返回</button>
+                    <button onclick="triggerAIPhase2()" class="bg-tech-primary hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg transition shadow-md hover:shadow-lg flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        确认策略并启动自动生成
+                    </button>
+                </div>
+            </div>
+
+            <!-- ================= 第三步：核心写入 ================= -->
+            <div id="step-3" class="hidden-step text-center py-24 relative z-10">
+                <div class="relative w-28 h-28 mx-auto mb-8">
+                    <div class="absolute inset-0 border-4 radar-spinner rounded-full animate-[spin_2s_linear_infinite]"></div>
+                    <div class="absolute inset-2 bg-blue-50 rounded-full flex items-center justify-center">
+                        <svg class="h-10 w-10 text-tech-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                </div>
+                
+                <h2 class="text-3xl font-bold text-gray-900 mb-3">AI 矩阵已成功写入 Ragic</h2>
+                <p class="text-gray-500 mb-10 text-lg">自动化决策树已运行完毕，共生成若干条高优聚合账单。</p>
+                
+                <div class="flex justify-center gap-5">
+                    <button onclick="window.location.reload()" class="bg-white border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700 font-bold py-3 px-6 rounded-xl transition">
+                        执行新批次任务
+                    </button>
+                    <a href="https://www.ragic.com.cn/zyos/accounting/6?PAGEID=QFr" target="_blank" rel="noopener noreferrer" class="bg-tech-primary hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-md hover:shadow-lg transition flex items-center gap-2 transform hover:-translate-y-0.5">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        进入 Ragic 审查成果
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ================= Charge Code 选择弹框 ================= -->
+    <div id="chargeCodeModal" class="fixed inset-0 z-[100] hidden items-center justify-center p-4" style="background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px);">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1400px] max-h-[88vh] flex flex-col overflow-hidden border border-gray-200" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-white">
+                <div class="flex items-center gap-3">
+                    <div class="bg-purple-100 p-2 rounded-lg">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">选择 Ragic Charge Code</h3>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            <span id="chargeCodeModalSubtitle">正在加载...</span>
+                            <span class="ml-2 text-purple-600">· 正在为明细 <span id="chargeCodeTargetFee" class="font-bold">-</span> 选择</span>
+                        </p>
+                    </div>
+                </div>
+                <button onclick="closeChargeCodeModal()" class="text-gray-400 hover:text-gray-700 hover:bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center transition">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="px-6 py-3 border-b border-gray-100 bg-gray-50/50">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="relative">
+                        <label class="absolute -top-1.5 left-2 px-1 bg-gray-50 text-[10px] font-bold text-purple-600 tracking-wide">JKS_QUOTE_CODE</label>
+                        <input type="text" id="chargeCodeSearchJks" placeholder="按 JKS_QUOTE_CODE 搜索..."
+                            class="tech-input pl-9 pr-9 bg-white" oninput="onChargeCodeSearch()">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <button type="button" id="chargeCodeClearJks" onclick="clearChargeCodeSearch('jks')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 flex items-center justify-center" title="清空">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    <div class="relative">
+                        <label class="absolute -top-1.5 left-2 px-1 bg-gray-50 text-[10px] font-bold text-purple-600 tracking-wide">CHARGE CODE</label>
+                        <input type="text" id="chargeCodeSearchCode" placeholder="按 Charge Code 搜索..."
+                            class="tech-input pl-9 pr-9 bg-white" oninput="onChargeCodeSearch()">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <button type="button" id="chargeCodeClearCode" onclick="clearChargeCodeSearch('code')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 flex items-center justify-center" title="清空">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                    <div class="relative">
+                        <label class="absolute -top-1.5 left-2 px-1 bg-gray-50 text-[10px] font-bold text-purple-600 tracking-wide">CHARGE ITEM</label>
+                        <input type="text" id="chargeCodeSearchItem" placeholder="按 Charge Item 搜索..."
+                            class="tech-input pl-9 pr-9 bg-white" oninput="onChargeCodeSearch()">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <button type="button" id="chargeCodeClearItem" onclick="clearChargeCodeSearch('item')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 flex items-center justify-center" title="清空">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto" id="chargeCodeListScroll">
+                <table class="min-w-full text-sm" style="min-width: 2000px;">
+                    <thead class="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10 border-b border-gray-200">
+                        <tr>
+                            <th class="px-3 py-3 w-12 text-center sticky left-0 bg-gray-50 z-20 border-r border-gray-200">选择</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap sticky left-12 bg-gray-50 z-20 border-r border-gray-200">JKS_QUOTE_CODE</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Charge Code</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">金蝶</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Customer Project</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Warehouse Name</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap"><span class="text-red-500">*</span> Status</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Unit Price</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Currency</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">UoM</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Charge Item</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Explanation in Chinese</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Kingdee名称</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Description</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">计价单位</th>
+                        </tr>
+                    </thead>
+                    <tbody id="chargeCodeListBody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+
+            <div class="px-6 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                <div class="text-xs text-gray-500" id="chargeCodePageInfo">-</div>
+                <div class="flex items-center gap-2">
+                    <button id="chargeCodePagePrev" onclick="changeChargeCodePage(-1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">← 上一页</button>
+                    <div id="chargeCodePageNumbers" class="flex items-center gap-1"></div>
+                    <button id="chargeCodePageNext" onclick="changeChargeCodePage(1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">下一页 →</button>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-100 bg-white flex items-center justify-between">
+                <div class="text-sm">
+                    <span class="text-gray-500">已选:</span>
+                    <span id="chargeCodeSelectedPreview" class="ml-2 font-bold text-gray-400">未选择</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeChargeCodeModal()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">取消</button>
+                    <button id="chargeCodeConfirmBtn" onclick="confirmChargeCodeSelection()" disabled
+                        class="px-5 py-2 text-sm font-bold text-white bg-purple-600 rounded-lg hover:bg-purple-700 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition">确认选择</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 开票汇率索引 选择弹框 ================= -->
+    <div id="exRateModal" class="fixed inset-0 z-[100] hidden items-center justify-center p-4" style="background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px);">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1100px] max-h-[88vh] flex flex-col overflow-hidden border border-gray-200" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white">
+                <div class="flex items-center gap-3">
+                    <div class="bg-amber-100 p-2 rounded-lg">
+                        <svg class="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">选择开票汇率索引</h3>
+                        <p class="text-xs text-gray-500 mt-0.5" id="exRateModalSubtitle">正在加载...</p>
+                    </div>
+                </div>
+                <button onclick="closeExRateModal()" class="text-gray-400 hover:text-gray-700 hover:bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center transition">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <div class="px-6 py-3 border-b border-gray-100 bg-gray-50/50">
+                <div class="relative">
+                    <input type="text" id="exRateSearchInput" placeholder="搜索 流水ID / 周数 / 项目编号 / 币种 等..."
+                        class="tech-input pl-9 bg-white" oninput="onExRateSearch()">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-auto" id="exRateListScroll">
+                <table class="min-w-full text-sm" style="min-width: 1400px;">
+                    <thead class="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10 border-b border-gray-200">
+                        <tr>
+                            <th class="px-3 py-3 w-12 text-center sticky left-0 bg-gray-50 z-20 border-r border-gray-200">选择</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap sticky left-12 bg-gray-50 z-20 border-r border-gray-200">流水ID</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">周数</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">项目编号</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap"><span class="text-red-500">*</span> 账单计费币种</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap"><span class="text-red-500">*</span> 开票币种</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">数值</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">開票字段</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">转换描述</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">更新日期</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">创建日期</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exRateListBody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+
+            <div class="px-6 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                <div class="text-xs text-gray-500" id="exRatePageInfo">-</div>
+                <div class="flex items-center gap-2">
+                    <button id="exRatePagePrev" onclick="changeExRatePage(-1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">← 上一页</button>
+                    <div id="exRatePageNumbers" class="flex items-center gap-1"></div>
+                    <button id="exRatePageNext" onclick="changeExRatePage(1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">下一页 →</button>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-100 bg-white flex items-center justify-between">
+                <div class="text-sm">
+                    <span class="text-gray-500">已选:</span>
+                    <span id="exRateSelectedPreview" class="ml-2 font-bold text-gray-400">未选择</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeExRateModal()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">取消</button>
+                    <button id="exRateConfirmBtn" onclick="confirmExRateSelection()" disabled
+                        class="px-5 py-2 text-sm font-bold text-white bg-amber-600 rounded-lg hover:bg-amber-700 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition">确认选择</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= Payee 选择弹框 ================= -->
+    <div id="payeeModal" class="fixed inset-0 z-[100] hidden items-center justify-center p-4" style="background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px);">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1200px] max-h-[88vh] flex flex-col overflow-hidden border border-gray-200" onclick="event.stopPropagation()">
+            <!-- 弹框头部 -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-100 p-2 rounded-lg">
+                        <svg class="w-5 h-5 text-tech-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">选择收款方 (Payee)</h3>
+                        <p class="text-xs text-gray-500 mt-0.5" id="payeeModalSubtitle">正在加载...</p>
+                    </div>
+                </div>
+                <button onclick="closePayeeModal()" class="text-gray-400 hover:text-gray-700 hover:bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center transition">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- 搜索栏 -->
+            <div class="px-6 py-3 border-b border-gray-100 bg-gray-50/50">
+                <div class="relative">
+                    <input type="text" id="payeeSearchInput" placeholder="搜索 Payee Code / Company / FIN客户编码 / 名称 / Contact / Tel / Email 等..."
+                        class="tech-input pl-9 bg-white" oninput="onPayeeSearch()">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </div>
+            </div>
+
+            <!-- 列表区 -->
+            <div class="flex-1 overflow-auto" id="payeeListScroll">
+                <table class="min-w-full text-sm" style="min-width: 1600px;">
+                    <thead class="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10 border-b border-gray-200">
+                        <tr>
+                            <th class="px-3 py-3 w-12 text-center sticky left-0 bg-gray-50 z-20 border-r border-gray-200">选择</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap sticky left-12 bg-gray-50 z-20 border-r border-gray-200">Payee Code</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap"><span class="text-red-500">*</span> Company Name</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap"><span class="text-red-500">*</span> FIN客户编码</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap"><span class="text-red-500">*</span> FIN客户名称</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">FIN客户组</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Address</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Contact</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Tel</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Email</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">共用组织</th>
+                        </tr>
+                    </thead>
+                    <tbody id="payeeListBody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+
+            <!-- 分页栏 -->
+            <div class="px-6 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                <div class="text-xs text-gray-500" id="payeePageInfo">-</div>
+                <div class="flex items-center gap-2">
+                    <button id="payeePagePrev" onclick="changePayeePage(-1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">← 上一页</button>
+                    <div id="payeePageNumbers" class="flex items-center gap-1"></div>
+                    <button id="payeePageNext" onclick="changePayeePage(1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">下一页 →</button>
+                </div>
+            </div>
+
+            <!-- 底部确认栏 -->
+            <div class="px-6 py-4 border-t border-gray-100 bg-white flex items-center justify-between">
+                <div class="text-sm">
+                    <span class="text-gray-500">已选:</span>
+                    <span id="payeeSelectedPreview" class="ml-2 font-bold text-gray-400">未选择</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="closePayeeModal()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">取消</button>
+                    <button id="payeeConfirmBtn" onclick="confirmPayeeSelection()" disabled
+                        class="px-5 py-2 text-sm font-bold text-white bg-tech-primary rounded-lg hover:bg-blue-700 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition">确认选择</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= Bank 选择弹框 ================= -->
+    <div id="bankModal" class="fixed inset-0 z-[100] hidden items-center justify-center p-4" style="background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px);">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[1200px] max-h-[88vh] flex flex-col overflow-hidden border border-gray-200" onclick="event.stopPropagation()">
+            <!-- 弹框头部 -->
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-100 p-2 rounded-lg">
+                        <svg class="w-5 h-5 text-tech-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M5 6h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">选择打款银行账户</h3>
+                        <p class="text-xs text-gray-500 mt-0.5" id="bankModalSubtitle">正在加载...</p>
+                    </div>
+                </div>
+                <button onclick="closeBankModal()" class="text-gray-400 hover:text-gray-700 hover:bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center transition">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- 搜索栏 -->
+            <div class="px-6 py-3 border-b border-gray-100 bg-gray-50/50">
+                <div class="relative">
+                    <input type="text" id="bankSearchInput" placeholder="搜索 ID / Bank Name / Beneficiary / Currency / Account / Swift / Company / 开票前缀 / 结算组织 等..."
+                        class="tech-input pl-9 bg-white" oninput="onBankSearch()">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </div>
+            </div>
+
+            <!-- 列表区(横向滚动支持宽表) -->
+            <div class="flex-1 overflow-auto" id="bankListScroll">
+                <table class="min-w-full text-sm" style="min-width: 1600px;">
+                    <thead class="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10 border-b border-gray-200">
+                        <tr>
+                            <th class="px-3 py-3 w-12 text-center sticky left-0 bg-gray-50 z-20 border-r border-gray-200">选择</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap sticky left-12 bg-gray-50 z-20 border-r border-gray-200">ID</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Bank Name</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Beneficiary</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Currency</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Account No</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Swift Code</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">备注</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Company</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">Company Add.</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">开票前缀</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">本位币</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">本位币编码</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">结算组织</th>
+                            <th class="px-3 py-3 text-left whitespace-nowrap">组织代码</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bankListBody" class="divide-y divide-gray-100"></tbody>
+                </table>
+            </div>
+
+            <!-- 分页栏 -->
+            <div class="px-6 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                <div class="text-xs text-gray-500" id="bankPageInfo">-</div>
+                <div class="flex items-center gap-2">
+                    <button id="bankPagePrev" onclick="changeBankPage(-1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">← 上一页</button>
+                    <div id="bankPageNumbers" class="flex items-center gap-1"></div>
+                    <button id="bankPageNext" onclick="changeBankPage(1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition">下一页 →</button>
+                </div>
+            </div>
+
+            <!-- 底部确认栏 -->
+            <div class="px-6 py-4 border-t border-gray-100 bg-white flex items-center justify-between">
+                <div class="text-sm">
+                    <span class="text-gray-500">已选:</span>
+                    <span id="bankSelectedPreview" class="ml-2 font-bold text-gray-800">未选择</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeBankModal()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">取消</button>
+                    <button id="bankConfirmBtn" onclick="confirmBankSelection()" disabled
+                        class="px-5 py-2 text-sm font-bold text-white bg-tech-primary rounded-lg hover:bg-blue-700 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition">确认选择</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function downloadTemplate() {
+            if (typeof XLSX === 'undefined') {
+                alert('XLSX 核心库尚未加载完成,请稍候几秒后再试。\n如长时间未加载,请检查网络连接并刷新页面。');
+                return;
+            }
+            const headers = ["Order No.", "Charge Item", "Unit Price", "Qty", "Currency", "Amount", "USD", "Charge code"];
+            const data = [
+                headers,
+                ["ORD-20231120-01", "Ocean Freight", 1200, 1, "USD", 1200, 1200, "FRT"],
+                ["ORD-20231120-01", "Handling Fee", 50, 2, "USD", 100, 100, "HDL"],
+                ["ORD-20231120-02", "Customs Clearance", 300, 1, "CNY", 300, 42.5, "CUS"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            ws['!cols'] = [ { wch: 18 }, { wch: 20 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 } ];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Standard Template");
+            XLSX.writeFile(wb, "Billing_Reference_Template.xlsx");
+        }
+
+        let uploadedHeaders = []; 
+        let fullUploadedData = []; 
+        let matchedFeeColumn = ""; 
+
+        document.getElementById('fileUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (typeof XLSX === 'undefined') {
+                alert('XLSX 核心库尚未加载完成,请稍候几秒后再试。\n如长时间未加载,请检查网络连接并刷新页面。');
+                e.target.value = '';
+                return;
+            }
+            const fakeLogs = [
+                "初始化大语言模型引擎 (v2.4)...",
+                "提取特征空间向量矩阵...",
+                "识别表头及明细数据边界...",
+                "从 Ragic 拉取目标字段(tablekey=1006010)...",
+                "分析完毕,数据结构清洗成功。"
+            ];
+            runFakeAILogging("AI 正在解析数据与同步配置...", fakeLogs, async () => {
+                // 确保 Ragic 字段已拉取(未完成则等待;已失败则使用兜底字段)
+                if (!ragicFieldsLoaded && systemFields.length === 0) {
+                    await fetchRagicFields();
+                }
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    fullUploadedData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
+                    if(fullUploadedData.length > 0) {
+                        uploadedHeaders = Object.keys(fullUploadedData[0]);
+                        renderPreview(fullUploadedData); 
+                        matchedFeeColumn = generateMappingUI(); 
+                        populateSplitFields();
+                        generateChargeCodeUI(matchedFeeColumn); 
+                        refreshMappingCounts();
+                    } else alert("文件结构异常");
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        });
+
+        function renderPreview(data) {
+            const head = document.getElementById('tableHead');
+            const body = document.getElementById('tableBody');
+            head.innerHTML = '<tr>' + uploadedHeaders.map(h => `<th class="px-4 py-3 font-semibold">${h}</th>`).join('') + '</tr>';
+            body.innerHTML = '';
+            for(let i=0; i<Math.min(data.length, 3); i++) {
+                body.innerHTML += `<tr class="hover:bg-gray-50 transition">` + uploadedHeaders.map(h => `<td class="px-4 py-3">${data[i][h] || ''}</td>`).join('') + `</tr>`;
+            }
+            document.getElementById('previewArea').classList.remove('hidden');
+        }
+
+        // ================= 从 Ragic 接口动态获取系统目标字段 =================
+        // 接口:https://wls.zh1gl.com/api/crdnprinter/fields
+        // 返回:包含 field_name(字段中文名)、is_required(Yes/No)等
+        let systemFields = []; // 动态填充
+        let ragicFieldsLoaded = false;
+
+        // 根据 field_name 智能推断匹配关键词(供 AI 语义匹配源 Excel 表头用)
+        function inferMatchKeys(fieldName) {
+            const name = (fieldName || '').toLowerCase();
+            const keyMap = [
+                { test: /invoice\s*no|invoice\s*#|发票号|账单号/, keys: ["invoice", "发票", "账单号"] },
+                { test: /order|订单|单号|提单|b\/l|bl\s*no/, keys: ["order", "订单", "单号", "提单"] },
+                { test: /charge\s*item|fee\s*name|费用名|项目名|款项|收费项|服务项/, keys: ["charge item", "fee name", "费用", "项目", "款项"] },
+                { test: /unit\s*price|单价/, keys: ["unit price", "单价"] },
+                { test: /qty|quantity|数量|件数/, keys: ["qty", "quantity", "数量", "件数"] },
+                { test: /currency|币种|货币|ccy/, keys: ["currency", "币种", "货币", "ccy"] },
+                { test: /amount|金额|总价|合计|total/, keys: ["amount", "金额", "总价", "total"] },
+                { test: /usd|美元|美金/, keys: ["usd", "美元", "美金"] },
+                { test: /charge\s*code|code|编码|代码/, keys: ["charge code", "code", "编码"] },
+                { test: /remark|note|备注|说明/, keys: ["remark", "note", "备注", "说明"] },
+                { test: /date|日期|时间|etd|eta/, keys: ["date", "日期", "时间"] },
+                { test: /vendor|supplier|供应商|承运/, keys: ["vendor", "supplier", "供应商", "承运"] },
+                { test: /customer|client|客户|收货/, keys: ["customer", "client", "客户", "收货"] },
+                { test: /pol|port\s*of\s*loading|起运港|装货港/, keys: ["pol", "起运港", "装货港"] },
+                { test: /pod|port\s*of\s*discharge|目的港|卸货港/, keys: ["pod", "目的港", "卸货港"] },
+                { test: /container|箱号|柜号/, keys: ["container", "箱号", "柜号"] }
+            ];
+            for (const m of keyMap) if (m.test.test(name)) return m.keys;
+            // 未命中规则时:字段名本身作为关键词
+            return [name.trim()].filter(Boolean);
+        }
+
+        // 拉取接口并转换为 systemFields 结构
+        async function fetchRagicFields() {
+            const API = 'https://wls.zh1gl.com/api/crdnprinter/fields?tabcode=accounting&tablecode=6&tablekey=1006010';
+            try {
+                const res = await fetch(API);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                
+                // 校验业务层 code(返回格式:{code:1, msg:"ok", data:{...}})
+                if (json.code !== undefined && json.code !== 1 && json.code !== 0 && json.code !== 200) {
+                    throw new Error('接口业务错误: ' + (json.msg || 'unknown'));
+                }
+                
+                // 兼容多种数据层级:json.data.data / json.data / json
+                const payload = json.data !== undefined ? json.data : json;
+                
+                // data 可能是数组,也可能是对象(key=field_key, value=字段详情)
+                let list = [];
+                if (Array.isArray(payload)) {
+                    list = payload;
+                } else if (payload && typeof payload === 'object') {
+                    // 取出所有 value 作为字段列表
+                    list = Object.values(payload).filter(v => v && typeof v === 'object' && (v.field_name || v.fieldName));
+                }
+                
+                if (list.length === 0) throw new Error('接口返回数据为空或结构未识别');
+
+                // 去除 HTML 标签的工具函数
+                const stripHtml = (s) => String(s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+                systemFields = list.map((item, idx) => {
+                    const fname = stripHtml(item.field_name || item.fieldName || `字段${idx+1}`);
+                    const required = String(item.is_required || item.isRequired || '').toLowerCase() === 'yes';
+                    return {
+                        id: String(item.id || item.field_id || item.field_key || `field_${idx}`),
+                        name: fname,
+                        keys: inferMatchKeys(fname),
+                        required: required,
+                        fieldKey: item.field_key,   // 保留原 field_key,后续写回 Ragic 需要
+                        tableId: item.table_id,
+                        raw: item
+                    };
+                });
+                
+                // 按 is_required=Yes 优先排序:必填项排前面,便于用户优先处理
+                systemFields.sort((a, b) => (b.required ? 1 : 0) - (a.required ? 1 : 0));
+                
+                ragicFieldsLoaded = true;
+                console.log('✅ Ragic 字段已加载:', systemFields.length, '个 (必填', systemFields.filter(f=>f.required).length, '个)');
+                return true;
+            } catch (err) {
+                console.error('❌ Ragic 字段拉取失败:', err);
+                // 兜底:使用默认字段结构,保证页面可用
+                systemFields = [
+                    { id: "order_no", name: "Order No. (订单号)", keys: ["order", "订单", "单号"], required: true },
+                    { id: "fee_name", name: "Charge Item (费用项目)", keys: ["charge item", "fee", "费用", "项目"], required: true },
+                    { id: "unit_price", name: "Unit Price (单价)", keys: ["unit price", "单价"], required: false },
+                    { id: "qty", name: "Qty (数量)", keys: ["qty", "数量", "件数"], required: false },
+                    { id: "currency", name: "Currency (币种)", keys: ["currency", "币种"], required: true },
+                    { id: "amount", name: "Amount (金额)", keys: ["amount", "金额", "总价"], required: true },
+                    { id: "usd", name: "USD (美元折算)", keys: ["usd", "美元"], required: false },
+                    { id: "charge_code", name: "Charge code (系统编码)", keys: ["charge code", "code", "编码"], required: true }
+                ];
+                ragicFieldsLoaded = false;
+                return false;
+            }
+        }
+
+        // ================= 通用懒加载下拉(按需触发 + 状态锁) =================
+        // loadStates: 每个下拉的状态独立维护:idle | loading | loaded | error
+        const loadStates = {};
+
+        /**
+         * 通用下拉加载函数
+         * @param {object} cfg - 配置对象
+         * @param {string} cfg.key - 状态键(用于区分不同下拉)
+         * @param {string} cfg.selectId - 下拉框 DOM id
+         * @param {number} cfg.tableCode - 接口的 tablecode 参数
+         * @param {string} cfg.label - 展示文案(如 "业务部门" / "服务地")
+         */
+        async function fetchDropdown(cfg) {
+            const { key, selectId, tableCode, label } = cfg;
+            const API = `https://wls.zh1gl.com/api/crdnprinter/index?tabcode=forms3&tablecode=${tableCode}`;
+            const sel = document.getElementById(selectId);
+            if (!sel) return;
+            loadStates[key] = 'loading';
+            const prevValue = sel.value;
+            sel.innerHTML = '<option value="">⏳ 正在请求接口...</option>';
+            try {
+                const res = await fetch(API);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                if (json.code !== undefined && json.code !== 1 && json.code !== 0 && json.code !== 200) {
+                    throw new Error('接口错误: ' + (json.msg || 'unknown'));
+                }
+                // 兼容多种返回结构
+                const payload = json.data !== undefined ? json.data : json;
+                let list = [];
+                if (Array.isArray(payload)) list = payload;
+                else if (payload && typeof payload === 'object') {
+                    if (Array.isArray(payload.list)) list = payload.list;
+                    else if (Array.isArray(payload.data)) list = payload.data;
+                    else if (Array.isArray(payload.rows)) list = payload.rows;
+                    else list = Object.values(payload).filter(v => v && typeof v === 'object');
+                }
+                if (list.length === 0) throw new Error(label + '数据为空');
+
+                // 提取 name + id
+                const items = list.map((item, idx) => {
+                    const name = item.name || item.Name || item.title || '';
+                    const id = item.id || item.value || name || idx;
+                    return { id: String(id), name: String(name).trim() };
+                }).filter(d => d.name);
+
+                if (items.length === 0) throw new Error('未提取到有效 name 字段');
+
+                sel.innerHTML = `<option value="">-- 请选择${label} --</option>` +
+                    items.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+                if (prevValue) sel.value = prevValue;
+                loadStates[key] = 'loaded';
+                console.log(`✅ ${label}已加载:`, items.length, '个');
+            } catch (err) {
+                console.error(`❌ ${label}加载失败:`, err);
+                sel.innerHTML = '<option value="">⚠ 加载失败,点击重试</option>';
+                loadStates[key] = 'error';
+            }
+        }
+
+        // ---- 业务部门(tablecode=3)----
+        function ensureDepartments() {
+            const s = loadStates.dept;
+            if (!s || s === 'idle' || s === 'error') {
+                loadStates.dept = 'idle';
+                fetchDropdown({ key: 'dept', selectId: 'deptSelect', tableCode: 3, label: '业务部门' });
+            }
+        }
+
+        // ---- 服务地(tablecode=1)----
+        function ensureServiceAreas() {
+            const s = loadStates.serviceArea;
+            if (!s || s === 'idle' || s === 'error') {
+                loadStates.serviceArea = 'idle';
+                fetchDropdown({ key: 'serviceArea', selectId: 'serviceAreaSelect', tableCode: 1, label: '服务地' });
+            }
+        }
+
+        // ---- 客户组(tablecode=2)----
+        function ensureCustomerGroups() {
+            const s = loadStates.customerGroup;
+            if (!s || s === 'idle' || s === 'error') {
+                loadStates.customerGroup = 'idle';
+                fetchDropdown({ key: 'customerGroup', selectId: 'customerGroupSelect', tableCode: 2, label: '客户组' });
+            }
+        }
+
+        // ================= Payee 选择弹框(分页列表 + 单选) =================
+        // 接口:https://wls.zh1gl.com/api/crdnprinter/index?tabcode=archive&tablecode=10
+        // 字段映射:company_name → Bank Payee 输入框显示
+        //        fin_customer_name → Bill to 回填
+        //        contact → Attn 回填
+        //        tel → Tel 回填
+        let payeeDataList = [];           // 全量记录
+        let payeeFilteredList = [];       // 搜索后的过滤结果
+        let payeeCurrentPage = 1;         // 当前页(1-based)
+        const PAYEE_PAGE_SIZE = 10;       // 每页条数
+        let payeeTempSelectedKey = '';    // 弹框内临时选中(确认前)
+
+        // 打开弹框
+        async function openPayeeModal() {
+            const modal = document.getElementById('payeeModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            // 恢复之前的确认值
+            payeeTempSelectedKey = document.getElementById('payeeSelected').value || '';
+            updatePayeeSelectedPreview();
+            if (loadStates.payee !== 'loaded') {
+                await loadPayees();
+            } else {
+                applyPayeeFilterAndRender();
+            }
+        }
+
+        function closePayeeModal() {
+            const modal = document.getElementById('payeeModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // 拉取 Payee 数据
+        async function loadPayees() {
+            loadStates.payee = 'loading';
+            const body = document.getElementById('payeeListBody');
+            const subtitle = document.getElementById('payeeModalSubtitle');
+            const statusEl = document.getElementById('payeeStatus');
+            subtitle.innerText = '正在请求接口...';
+            statusEl.innerText = '⏳ 加载中...';
+            statusEl.className = 'text-[10px] text-blue-500 normal-case tracking-normal font-normal';
+            body.innerHTML = `<tr><td colspan="11" class="px-4 py-12 text-center text-gray-400 text-sm">
+                <div class="inline-flex items-center gap-2"><div class="w-4 h-4 border-2 border-blue-300 border-t-tech-primary rounded-full animate-spin"></div>正在加载收款方列表...</div>
+            </td></tr>`;
+            try {
+                const res = await fetch('https://wls.zh1gl.com/api/crdnprinter/index?tabcode=archive&tablecode=10');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                if (json.code !== undefined && json.code !== 1 && json.code !== 0 && json.code !== 200) {
+                    throw new Error('接口错误: ' + (json.msg || 'unknown'));
+                }
+                const payload = json.data !== undefined ? json.data : json;
+                let list = [];
+                if (Array.isArray(payload)) list = payload;
+                else if (payload && typeof payload === 'object') {
+                    if (Array.isArray(payload.list)) list = payload.list;
+                    else if (Array.isArray(payload.data)) list = payload.data;
+                    else if (Array.isArray(payload.rows)) list = payload.rows;
+                    else list = Object.values(payload).filter(v => v && typeof v === 'object');
+                }
+                if (list.length === 0) throw new Error('数据为空');
+
+                const pick = (o, ...keys) => {
+                    for (const k of keys) {
+                        if (o[k] !== undefined && o[k] !== null && String(o[k]).trim() !== '') return String(o[k]).trim();
+                    }
+                    return '';
+                };
+
+                // comm_org 是数组:提取每项的 name(兼容 {name,id}/{label,value}/字符串)并用顿号拼接
+                const joinArrField = (o, ...keys) => {
+                    for (const k of keys) {
+                        const v = o[k];
+                        if (Array.isArray(v) && v.length > 0) {
+                            return v.map(x => {
+                                if (x === null || x === undefined) return '';
+                                if (typeof x === 'string' || typeof x === 'number') return String(x).trim();
+                                if (typeof x === 'object') {
+                                    // 对象数组:按常见字段名优先级取值
+                                    return String(x.name || x.org_name || x.orgName || x.label || x.title || x.value || x.id || '').trim();
+                                }
+                                return '';
+                            }).filter(Boolean).join('、');
+                        }
+                        // 容错:如果返回是字符串也能直接用
+                        if (typeof v === 'string' && v.trim()) return v.trim();
+                    }
+                    return '';
+                };
+
+                payeeDataList = list.map((item, idx) => ({
+                    _key:               String(item.id || (item.company_name || '') + '_' + idx),
+                    payee_code:         pick(item, 'payee_code', 'payeeCode', 'Payee Code'),
+                    company_name:       pick(item, 'company_name', 'companyName', 'Company Name'),
+                    fin_customer_code:  pick(item, 'fin_customer_code', 'finCustomerCode', 'FIN客户编码'),
+                    fin_customer_name:  pick(item, 'fin_customer_name', 'finCustomerName', 'FIN客户名称'),
+                    fin_customer_group: pick(item, 'fin_group', 'finGroup'),          // FIN 客户组
+                    address:            pick(item, 'address', 'Address'),
+                    contact:            pick(item, 'contact', 'Contact'),
+                    tel:                pick(item, 'tel', 'TEL', 'Tel'),
+                    email:              pick(item, 'email', 'Email', 'EMAIL'),
+                    shared_org:         joinArrField(item, 'comm_org', 'commOrg')     // 共用组织(数组 → 拼接)
+                })).filter(d => d.company_name);
+
+                loadStates.payee = 'loaded';
+                subtitle.innerText = `共 ${payeeDataList.length} 条收款方记录`;
+                statusEl.innerText = `已加载 ${payeeDataList.length} 条`;
+                statusEl.className = 'text-[10px] text-green-600 normal-case tracking-normal font-normal';
+                payeeCurrentPage = 1;
+                applyPayeeFilterAndRender();
+                console.log('✅ Payee 已加载:', payeeDataList.length, '条');
+            } catch (err) {
+                console.error('❌ Payee 加载失败:', err);
+                loadStates.payee = 'error';
+                subtitle.innerText = '加载失败';
+                statusEl.innerText = '⚠ 加载失败';
+                statusEl.className = 'text-[10px] text-red-500 normal-case tracking-normal font-normal';
+                body.innerHTML = `<tr><td colspan="11" class="px-4 py-12 text-center">
+                    <div class="text-red-500 text-sm font-medium mb-2">⚠ 收款方数据加载失败</div>
+                    <div class="text-xs text-gray-400 mb-4">${escapeHtml(err.message)}</div>
+                    <button onclick="loadPayees()" class="px-4 py-1.5 text-xs font-bold text-white bg-tech-primary rounded hover:bg-blue-700">点击重试</button>
+                </td></tr>`;
+            }
+        }
+
+        function onPayeeSearch() {
+            payeeCurrentPage = 1;
+            applyPayeeFilterAndRender();
+        }
+
+        function applyPayeeFilterAndRender() {
+            const kw = document.getElementById('payeeSearchInput').value.trim().toLowerCase();
+            payeeFilteredList = kw
+                ? payeeDataList.filter(d => {
+                    const hay = [
+                        d.payee_code, d.company_name, d.fin_customer_code, d.fin_customer_name,
+                        d.fin_customer_group, d.address, d.contact, d.tel, d.email, d.shared_org
+                    ].join(' ').toLowerCase();
+                    return hay.includes(kw);
+                })
+                : payeeDataList.slice();
+            renderPayeePage();
+        }
+
+        function renderPayeePage() {
+            const body = document.getElementById('payeeListBody');
+            const total = payeeFilteredList.length;
+            const totalPages = Math.max(1, Math.ceil(total / PAYEE_PAGE_SIZE));
+            if (payeeCurrentPage > totalPages) payeeCurrentPage = totalPages;
+            if (payeeCurrentPage < 1) payeeCurrentPage = 1;
+            const start = (payeeCurrentPage - 1) * PAYEE_PAGE_SIZE;
+            const pageItems = payeeFilteredList.slice(start, start + PAYEE_PAGE_SIZE);
+
+            if (total === 0) {
+                body.innerHTML = `<tr><td colspan="11" class="px-4 py-12 text-center text-gray-400 text-sm">
+                    <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    无匹配的收款方记录
+                </td></tr>`;
+            } else {
+                body.innerHTML = pageItems.map(d => {
+                    const isSelected = d._key === payeeTempSelectedKey;
+                    const rowBg = isSelected ? 'bg-blue-50' : 'hover:bg-blue-50/40';
+                    const stickyBg = isSelected ? 'bg-blue-50' : 'bg-white';
+                    const cell = (v, extraCls = '') => `<td class="px-3 py-3 text-gray-700 whitespace-nowrap ${extraCls}" title="${escapeHtml(v || '')}">${v ? escapeHtml(v) : '<span class="text-gray-300">-</span>'}</td>`;
+                    const cellTrunc = (v, max = 180) => {
+                        const short = v && v.length > 24 ? v.slice(0, 24) + '…' : (v || '');
+                        return `<td class="px-3 py-3 text-gray-700 whitespace-nowrap" style="max-width:${max}px" title="${escapeHtml(v || '')}">${v ? escapeHtml(short) : '<span class="text-gray-300">-</span>'}</td>`;
+                    };
+                    return `
+                    <tr class="payee-row cursor-pointer transition ${rowBg}"
+                        data-id="${escapeHtml(d._key)}" onclick="pickPayeeRow('${escapeHtml(d._key).replace(/'/g, "\\'")}')">
+                        <td class="px-3 py-3 text-center sticky left-0 z-10 border-r border-gray-100 ${stickyBg}">
+                            <div class="inline-flex items-center justify-center w-5 h-5 rounded-full border-2 ${isSelected ? 'border-tech-primary bg-tech-primary' : 'border-gray-300 bg-white'} transition">
+                                ${isSelected ? '<svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>' : ''}
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 font-mono text-xs font-semibold text-gray-900 whitespace-nowrap sticky left-12 z-10 border-r border-gray-100 ${stickyBg}" title="${escapeHtml(d.payee_code)}">${d.payee_code ? escapeHtml(d.payee_code) : '<span class="text-gray-300">-</span>'}</td>
+                        ${cell(d.company_name, 'font-medium text-gray-800')}
+                        ${cell(d.fin_customer_code, 'font-mono text-xs')}
+                        ${cell(d.fin_customer_name)}
+                        ${cell(d.fin_customer_group)}
+                        ${cellTrunc(d.address, 220)}
+                        ${cell(d.contact)}
+                        ${cell(d.tel, 'font-mono text-xs')}
+                        ${cell(d.email, 'font-mono text-xs')}
+                        ${cellTrunc(d.shared_org, 220)}
+                    </tr>`;
+                }).join('');
+            }
+
+            const endIdx = Math.min(start + PAYEE_PAGE_SIZE, total);
+            document.getElementById('payeePageInfo').innerText = total === 0
+                ? '无数据' : `显示 ${start + 1} - ${endIdx} 条,共 ${total} 条`;
+            document.getElementById('payeePagePrev').disabled = payeeCurrentPage <= 1;
+            document.getElementById('payeePageNext').disabled = payeeCurrentPage >= totalPages;
+            renderPayeePageNumbers(totalPages);
+        }
+
+        function renderPayeePageNumbers(totalPages) {
+            const wrap = document.getElementById('payeePageNumbers');
+            if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+            let pages = [];
+            const cur = payeeCurrentPage;
+            if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i);
+            } else {
+                pages.push(1);
+                if (cur > 3) pages.push('...');
+                for (let i = Math.max(2, cur - 1); i <= Math.min(totalPages - 1, cur + 1); i++) pages.push(i);
+                if (cur < totalPages - 2) pages.push('...');
+                pages.push(totalPages);
+            }
+            wrap.innerHTML = pages.map(p => {
+                if (p === '...') return '<span class="px-2 text-gray-400 text-xs">...</span>';
+                const active = p === cur;
+                return `<button onclick="gotoPayeePage(${p})" class="min-w-[28px] h-7 px-2 text-xs font-medium rounded transition ${active ? 'bg-tech-primary text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}">${p}</button>`;
+            }).join('');
+        }
+
+        function changePayeePage(delta) {
+            payeeCurrentPage += delta;
+            renderPayeePage();
+            document.getElementById('payeeListScroll').scrollTop = 0;
+        }
+        function gotoPayeePage(p) {
+            payeeCurrentPage = p;
+            renderPayeePage();
+            document.getElementById('payeeListScroll').scrollTop = 0;
+        }
+
+        function pickPayeeRow(key) {
+            payeeTempSelectedKey = key;
+            updatePayeeSelectedPreview();
+            renderPayeePage();
+        }
+
+        function updatePayeeSelectedPreview() {
+            const preview = document.getElementById('payeeSelectedPreview');
+            const btn = document.getElementById('payeeConfirmBtn');
+            const picked = payeeDataList.find(d => d._key === payeeTempSelectedKey);
+            if (picked) {
+                const codePart = picked.payee_code ? `<span class="font-mono">${escapeHtml(picked.payee_code)}</span> <span class="text-gray-400 font-normal mx-1">·</span> ` : '';
+                preview.innerHTML = `${codePart}<span class="text-gray-700 font-medium">${escapeHtml(picked.company_name)}</span>`;
+                preview.className = 'ml-2 font-bold text-tech-primary';
+                btn.disabled = false;
+            } else {
+                preview.innerText = '未选择';
+                preview.className = 'ml-2 font-bold text-gray-400';
+                btn.disabled = true;
+            }
+        }
+
+        // 确认:回填到输入框 + 联动 Bill to / Attn / Tel
+        function confirmPayeeSelection() {
+            const picked = payeeDataList.find(d => d._key === payeeTempSelectedKey);
+            if (!picked) return;
+            document.getElementById('payeeInput').value = picked.company_name;
+            document.getElementById('payeeSelected').value = picked._key;
+            document.getElementById('customerSelect').value = picked.fin_customer_name || '';
+            document.getElementById('payeeAttn').value = picked.contact || '';
+            document.getElementById('payeeTel').value = picked.tel || '';
+            closePayeeModal();
+        }
+
+        // ESC 关闭 Payee 弹框 + 点击遮罩关闭
+        document.getElementById('payeeModal').addEventListener('click', function(e) {
+            if (e.target === this) closePayeeModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const m = document.getElementById('payeeModal');
+                if (m && !m.classList.contains('hidden')) closePayeeModal();
+            }
+        });
+
+        // 兼容旧调用:保留函数名避免其他地方报错
+        function ensurePayees() { openPayeeModal(); }
+        function filterPayees() { /* 已废弃,由弹框搜索接管 */ }
+        function handlePayeeKey(e) { /* 已废弃 */ }
+
+        // XSS 防护:HTML 转义
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        // 页面加载时只预拉取 Ragic 字段;其他下拉均由用户点击触发
+        fetchRagicFields();
+
+        function generateMappingUI() {
+            const tbody = document.getElementById('mappingBody');
+            tbody.innerHTML = '';
+            let feeColName = ""; 
+            
+            // 更严格的费用字段识别:使用组合词 / 专有词,避免"费用金额""项目编号"等误命中
+            // 返回匹配强度分数:>0 表示是费用字段,数字越大越匹配
+            function scoreAsFeeField(name) {
+                const s = (name || '').toLowerCase();
+                if (!s) return 0;
+                // 强特征词:几乎肯定是费用名称列
+                if (/charge\s*item|fee\s*name|费用项目|费用名称|收费项目|收费项|款项名称|业务费用|fee\s*item/.test(s)) return 100;
+                // 中等特征词:可能是费用名称
+                if (/款项$|业务项目|服务项目|^项目名|项目名称|charge\s*name/.test(s)) return 50;
+                // 兜底英文 fee 单独出现(不要匹配 fee amount 这种)
+                if (/(^|[^a-z])fee([^a-z]|$)/i.test(s) && !/amount|金额|total|合计|编号|号$|no\.?$|code$/i.test(s)) return 30;
+                // "费用"单独出现但不接"金额/合计/编号/代码"
+                if (/费用/.test(s) && !/金额|合计|编号|代码|号$/.test(s)) return 20;
+                return 0;
+            }
+            
+            // 先一次扫描打分,选出最佳 fee 字段
+            let bestFeeFieldId = '';
+            let bestFeeScore = 0;
+            let scoredMap = {}; // id -> { score, bestMatch }
+            systemFields.forEach(sysField => {
+                const score = scoreAsFeeField(sysField.name);
+                const bestMatch = uploadedHeaders.find(h => sysField.keys.some(k => h.toLowerCase().includes(k.toLowerCase()))) || "";
+                scoredMap[sysField.id] = { score, bestMatch };
+                if (score > bestFeeScore && bestMatch) { 
+                    bestFeeScore = score; 
+                    bestFeeFieldId = sysField.id; 
+                    feeColName = bestMatch;
+                }
+            });
+            
+            systemFields.forEach(sysField => {
+                const { score, bestMatch } = scoredMap[sysField.id];
+                const isFeeField = sysField.id === bestFeeFieldId;
+                
+                let optionsHtml = '<option value="">-- 手动干预(未映射) --</option>' + uploadedHeaders.map(h => `<option value="${h}" ${h===bestMatch?'selected':''}>${h}</option>`).join('');
+                let aiBadge = bestMatch ? `<span class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-tech-primary border border-blue-200">AI 语义匹配</span>` : '';
+                let reqBadge = sysField.required ? '<span class="text-red-500 font-bold ml-1">*</span> <span class="ml-2 text-[10px] bg-red-50 text-red-500 border border-red-100 px-1.5 py-0.5 rounded font-normal">必填</span>' : '';
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-blue-50/30 transition" data-field-id="${sysField.id}">
+                        <td class="px-5 py-4 font-medium text-gray-800 flex items-center">
+                            <div class="w-1.5 h-1.5 rounded-full ${bestMatch ? 'bg-tech-primary' : 'bg-gray-300'} mr-3 shadow-sm"></div>
+                            ${sysField.name} ${reqBadge} ${aiBadge}
+                        </td>
+                        <td class="px-5 py-3">
+                            <div class="flex items-center">
+                                <select class="semantic-select tech-input text-sm font-medium text-gray-700 bg-white border-gray-200 hover:border-blue-300" data-is-fee="${isFeeField}" onchange="checkChargeCodeUpdate(this); refreshMappingCounts();">${optionsHtml}</select>
+                                <span class="count-badge hidden whitespace-nowrap ml-3"></span>
+                            </div>
+                        </td>
+                    </tr>`;
+            });
+            return feeColName;
+        }
+
+        // Charge Code 已选映射:{ [feeKey]: {完整记录 + charge_code 等} }
+        // 提交后端时由 window.getChargeCodeMappings() 读取
+        window.chargeCodeSelections = window.chargeCodeSelections || {};
+
+        function generateChargeCodeUI(feeColumnName) {
+            const section = document.getElementById('chargeCodeSection');
+            const tbody = document.getElementById('chargeCodeBody');
+            // 使用全局 selections,每次重渲染都保留之前的选中
+            const chargeCodeSelections = window.chargeCodeSelections;
+            tbody.innerHTML = '';
+            section.style.display = 'block';
+
+            // ---- 前置校验 1:上方映射里是否指定了 Charge Item 对应的源列 ----
+            if (!feeColumnName) {
+                tbody.innerHTML = `<tr><td colspan="2" class="p-6 text-center text-gray-400 text-sm">
+                    <svg class="w-8 h-8 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                    附件中未识别到 <span class="font-semibold text-gray-500">Charge Item</span> 列,请先在上方表格中指定映射
+                </td></tr>`;
+                return;
+            }
+
+            // ---- 前置校验 2:附件表头里确实存在这个列 ----
+            if (!uploadedHeaders.includes(feeColumnName)) {
+                tbody.innerHTML = `<tr><td colspan="2" class="p-6 text-center text-gray-400 text-sm">
+                    附件中不存在名为 <span class="font-mono text-gray-500">"${escapeHtml(feeColumnName)}"</span> 的列
+                </td></tr>`;
+                return;
+            }
+
+            // ---- 提取唯一费用值(过滤空字符串、null、undefined) ----
+            const uniqueFees = [...new Set(
+                fullUploadedData.map(row => row[feeColumnName])
+            )].filter(f => f !== null && f !== undefined && f.toString().trim() !== "");
+
+            // ---- 前置校验 3:提取到的值数量 ----
+            if (uniqueFees.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="2" class="p-6 text-center text-gray-400 text-sm">
+                    <span class="font-mono text-gray-500">"${escapeHtml(feeColumnName)}"</span> 列在附件中无有效值,未提取到任何费用明细
+                </td></tr>`;
+                return;
+            }
+
+            // ---- 正常渲染 ----
+            // Charge Code 由"点击输入框 → 弹框分页列表 → 单选回填"实现;保留已选映射便于后续提交后端
+            uniqueFees.forEach(fee => {
+                const feeKey = fee.toString();
+                const picked = chargeCodeSelections[feeKey]; // 若之前已选,回显
+                const aiBadge = ''; // 字典智配改由接口返回,暂无本地智配
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-purple-50/50 transition" data-fee-key="${escapeHtml(feeKey)}">
+                        <td class="px-5 py-4 font-medium text-gray-800 flex items-center">
+                            <div class="w-1.5 h-1.5 rounded-full ${picked ? 'bg-purple-500' : 'bg-gray-300'} mr-3 shadow-sm"></div>
+                            ${escapeHtml(feeKey)} ${aiBadge}
+                        </td>
+                        <td class="px-5 py-3">
+                            <div class="flex items-center gap-2">
+                                <div class="relative flex-1">
+                                    <input type="text" readonly
+                                        class="charge-input tech-input text-sm font-bold ${picked ? 'text-purple-700' : 'text-gray-600'} bg-white border-purple-100 hover:border-purple-300 focus:border-purple-500 focus:ring-purple-100 pr-9 cursor-pointer"
+                                        placeholder="-- 请手动选择 Ragic 编码 --"
+                                        value="${picked ? escapeHtml(picked.charge_code || '') : ''}"
+                                        onclick="openChargeCodeModal('${escapeHtml(feeKey).replace(/'/g, "\\'")}')">
+                                    <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </div>
+                                <span class="count-badge hidden whitespace-nowrap"></span>
+                            </div>
+                        </td>
+                    </tr>`;
+            });
+            refreshMappingCounts();
+        }
+
+        // ====== 新增：全表动态映射次数统计算法 ======
+        function refreshMappingCounts() {
+            // 1. 统计 Semantic Mapping (表头映射次数)
+            let semSelects = document.querySelectorAll('.semantic-select');
+            let semCounts = {};
+            // 收集次数
+            semSelects.forEach(sel => { if(sel.value) semCounts[sel.value] = (semCounts[sel.value] || 0) + 1; });
+            // 渲染徽章
+            semSelects.forEach(sel => {
+                let badge = sel.nextElementSibling;
+                if(sel.value) {
+                    let count = semCounts[sel.value];
+                    badge.innerText = `映射: ${count} 次`;
+                    // 如果同一个表头被映射了2次及以上，亮起橙红色警告防错
+                    badge.className = count > 1 
+                        ? "count-badge ml-3 px-2 py-0.5 rounded text-[11px] font-bold bg-orange-100 text-orange-600 border border-orange-200" 
+                        : "count-badge ml-3 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-500 border border-blue-100";
+                    badge.style.display = "inline-block";
+                } else {
+                    badge.style.display = "none";
+                }
+            });
+
+            // 2. 统计 Charge Code Mapping (编码映射次数)
+            let chargeInputs = document.querySelectorAll('.charge-input');
+            let chargeCounts = {};
+            chargeInputs.forEach(inp => { if(inp.value) chargeCounts[inp.value] = (chargeCounts[inp.value] || 0) + 1; });
+            chargeInputs.forEach(inp => {
+                // badge 是输入框父级 relative 容器的下一个兄弟(count-badge span)
+                const badge = inp.parentElement && inp.parentElement.parentElement
+                    ? inp.parentElement.parentElement.querySelector('.count-badge')
+                    : null;
+                if(inp.value) {
+                    inp.classList.add('text-purple-700'); inp.classList.remove('text-gray-600');
+                    if (!badge) return;
+                    const count = chargeCounts[inp.value];
+                    badge.innerText = `映射: ${count} 次`;
+                    badge.className = count > 1
+                        ? "count-badge ml-1 px-2 py-0.5 rounded text-[11px] font-bold bg-orange-100 text-orange-600 border border-orange-200"
+                        : "count-badge ml-1 px-2 py-0.5 rounded text-[11px] font-bold bg-purple-50 text-purple-600 border border-purple-100";
+                    badge.style.display = "inline-block";
+                } else {
+                    inp.classList.remove('text-purple-700'); inp.classList.add('text-gray-600');
+                    if (badge) badge.style.display = "none";
+                }
+            });
+        }
+
+        function checkChargeCodeUpdate(selectElement) { 
+            // 通过 data-is-fee 属性判断是否是费用项目字段(兼容动态字段 id)
+            if(selectElement.dataset.isFee === 'true') { 
+                generateChargeCodeUI(selectElement.value); 
+                refreshMappingCounts();
+            } 
+        }
+
+        function simulateCustomerChange() { document.getElementById('customerDictStatus').innerText = "正在同步该客户专属字典..."; setTimeout(() => { document.getElementById('customerDictStatus').innerText = "已挂载当前客户 Ragic 字典"; }, 800); }
+        function populateSplitFields() {
+            const select = document.getElementById('splitFieldSelect');
+            // 默认选中规则:优先匹配 order/订单/单号,然后是 id/编号/ref/no
+            const preferPatterns = [
+                /order|订单|单号/i,
+                /id\b|编号|ref|no\.?\b/i
+            ];
+            let autoPicked = '';
+            for (const pat of preferPatterns) {
+                const hit = uploadedHeaders.find(h => pat.test(h));
+                if (hit) { autoPicked = hit; break; }
+            }
+            select.innerHTML = '<option value="">-- 请选择关联字段 --</option>' +
+                uploadedHeaders.map(h => `<option value="${h}" ${h === autoPicked ? 'selected' : ''}>${h}</option>`).join('');
+            // 首次填充后同步一次徽标
+            updateSplitFieldBadge();
+        }
+
+        function toggleSplitField() {
+            const container = document.getElementById('splitFieldContainer');
+            const hint = document.getElementById('splitFieldHint');
+            const method = document.getElementById('invoiceMethodSelect').value;
+            if (method === 'split') {
+                container.classList.remove('hidden');
+                container.classList.add('expand-anim');
+                // 如果还没上传附件(uploadedHeaders 为空),提示用户
+                if (!uploadedHeaders || uploadedHeaders.length === 0) {
+                    const select = document.getElementById('splitFieldSelect');
+                    if (select && select.options.length <= 1) {
+                        select.innerHTML = '<option value="">-- 请先上传附件 --</option>';
+                    }
+                    hint.classList.remove('hidden');
+                } else {
+                    hint.classList.add('hidden');
+                    // 如果选项为空(之前没 populate 过),现在补一次
+                    const select = document.getElementById('splitFieldSelect');
+                    if (select && (select.options.length === 0 || (select.options.length === 1 && !select.options[0].value))) {
+                        populateSplitFields();
+                    }
+                }
+                updateSplitFieldBadge();
+            } else {
+                container.classList.add('hidden');
+                container.classList.remove('expand-anim');
+            }
+        }
+
+        // 下拉选择变化 → 更新右侧的"已选"徽标
+        function onSplitFieldChange() {
+            updateSplitFieldBadge();
+        }
+
+        function updateSplitFieldBadge() {
+            const select = document.getElementById('splitFieldSelect');
+            const badge = document.getElementById('splitFieldBadge');
+            const badgeText = document.getElementById('splitFieldBadgeText');
+            if (!select || !badge) return;
+            if (select.value) {
+                // 截断超长字段名,避免溢出
+                const label = select.value.length > 14 ? select.value.slice(0, 12) + '…' : select.value;
+                badgeText.innerText = label;
+                badge.classList.remove('hidden');
+                badge.classList.add('inline-flex');
+            } else {
+                badge.classList.add('hidden');
+                badge.classList.remove('inline-flex');
+            }
+        }
+        // ================= Bank 选择弹框(分页列表 + 单选) =================
+        // 接口:https://wls.zh1gl.com/api/crdnprinter/index?tabcode=forms3&tablecode=20
+        // 字段映射:bank_name→Bank Name, swift_code→Swift Code, account_no→Account/Routing No.
+        let bankDataList = [];          // 全量记录
+        let bankFilteredList = [];      // 搜索后的过滤结果
+        let bankCurrentPage = 1;        // 当前页码(1-based)
+        const BANK_PAGE_SIZE = 10;      // 每页条数
+        let bankTempSelectedId = '';    // 弹框内临时选中(确认前)
+
+        // 打开弹框
+        async function openBankModal() {
+            const modal = document.getElementById('bankModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            // 恢复之前的确认值作为临时选中
+            bankTempSelectedId = document.getElementById('bankIdSelect').value || '';
+            updateSelectedPreview();
+            // 首次打开才拉取
+            if (loadStates.bank !== 'loaded') {
+                await loadBanks();
+            } else {
+                // 已加载过,直接刷新列表(比如保持搜索/页码)
+                applyBankFilterAndRender();
+            }
+        }
+
+        function closeBankModal() {
+            const modal = document.getElementById('bankModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // 点击遮罩关闭
+        document.getElementById('bankModal').addEventListener('click', function(e) {
+            if (e.target === this) closeBankModal();
+        });
+        // ESC 关闭
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const m = document.getElementById('bankModal');
+                if (!m.classList.contains('hidden')) closeBankModal();
+            }
+        });
+
+        // 拉取接口数据
+        async function loadBanks() {
+            loadStates.bank = 'loading';
+            const body = document.getElementById('bankListBody');
+            const subtitle = document.getElementById('bankModalSubtitle');
+            subtitle.innerText = '正在请求接口...';
+            body.innerHTML = `<tr><td colspan="14" class="px-4 py-12 text-center text-gray-400 text-sm">
+                <div class="inline-flex items-center gap-2"><div class="w-4 h-4 border-2 border-blue-300 border-t-tech-primary rounded-full animate-spin"></div>正在加载银行列表...</div>
+            </td></tr>`;
+            try {
+                const res = await fetch('https://wls.zh1gl.com/api/crdnprinter/index?tabcode=forms3&tablecode=20');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                if (json.code !== undefined && json.code !== 1 && json.code !== 0 && json.code !== 200) {
+                    throw new Error('接口错误: ' + (json.msg || 'unknown'));
+                }
+                const payload = json.data !== undefined ? json.data : json;
+                let list = [];
+                if (Array.isArray(payload)) list = payload;
+                else if (payload && typeof payload === 'object') {
+                    if (Array.isArray(payload.list)) list = payload.list;
+                    else if (Array.isArray(payload.data)) list = payload.data;
+                    else if (Array.isArray(payload.rows)) list = payload.rows;
+                    else list = Object.values(payload).filter(v => v && typeof v === 'object');
+                }
+                if (list.length === 0) throw new Error('银行数据为空');
+
+                // 字段兼容:接口可能使用下划线命名或驼峰命名,这里都尝试一下
+                const pick = (o, ...keys) => {
+                    for (const k of keys) {
+                        if (o[k] !== undefined && o[k] !== null && String(o[k]).trim() !== '') return String(o[k]).trim();
+                    }
+                    return '';
+                };
+                bankDataList = list.map((item, idx) => ({
+                    // 内部唯一 key(用于 JS 识别行),优先取 id,fallback 用 bank_name + 索引
+                    _key:            String(item.id || (item.bank_name || '') + '_' + idx),
+                    // 展示用 ID 字段(来自接口 id)
+                    bank_id:         pick(item, 'id', 'ID'),
+                    bank_name:       pick(item, 'bank_name', 'bankName', 'Bank Name'),
+                    beneficiary:     pick(item, 'beneficiary', 'Beneficiary'),
+                    currency:        pick(item, 'currency', 'Currency', 'ccy'),
+                    account_no:      pick(item, 'account_no', 'accountNo', 'Account No', 'account'),
+                    swift_code:      pick(item, 'swift_code', 'swiftCode', 'Swift Code'),
+                    remark:          pick(item, 'remark', 'Remark', '备注', 'note'),
+                    company:         pick(item, 'company', 'Company'),
+                    company_address: pick(item, 'company_address', 'companyAddress', 'Company Add', 'Company Add.', 'company_add'),
+                    invoice_prefix:  pick(item, 'invoice_q_z', 'invoiceQZ'),           // 开票前缀
+                    functional_currency:      pick(item, 'b_w_b', 'bWB'),               // 本位币
+                    functional_currency_code: pick(item, 'b_w_b_code', 'bWBCode'),      // 本位币编码
+                    settlement_org:  pick(item, 'settle_org', 'settleOrg'),             // 结算组织
+                    org_code:        pick(item, 'org_d_m', 'orgDM'),                    // 组织代码
+                    logo:            pick(item, 'logo', 'Logo', 'LOGO')                 // 公司 logo(不显示在列表,但提交时需要传)
+                })).filter(d => d.bank_name);
+
+                if (bankDataList.length === 0) throw new Error('未提取到有效 bank_name');
+                loadStates.bank = 'loaded';
+                subtitle.innerText = `共 ${bankDataList.length} 条银行账户记录`;
+                bankCurrentPage = 1;
+                applyBankFilterAndRender();
+                console.log('✅ Bank 已加载:', bankDataList.length, '条');
+            } catch (err) {
+                console.error('❌ Bank 加载失败:', err);
+                loadStates.bank = 'error';
+                subtitle.innerText = '加载失败';
+                body.innerHTML = `<tr><td colspan="14" class="px-4 py-12 text-center">
+                    <div class="text-red-500 text-sm font-medium mb-2">⚠ 银行数据加载失败</div>
+                    <div class="text-xs text-gray-400 mb-4">${escapeHtml(err.message)}</div>
+                    <button onclick="loadBanks()" class="px-4 py-1.5 text-xs font-bold text-white bg-tech-primary rounded hover:bg-blue-700">点击重试</button>
+                </td></tr>`;
+            }
+        }
+
+        // 搜索输入
+        function onBankSearch() {
+            bankCurrentPage = 1;
+            applyBankFilterAndRender();
+        }
+
+        // 根据搜索关键词过滤 + 渲染当前页
+        function applyBankFilterAndRender() {
+            const kw = document.getElementById('bankSearchInput').value.trim().toLowerCase();
+            bankFilteredList = kw
+                ? bankDataList.filter(d => {
+                    // 合并所有可搜索文本字段
+                    const hay = [
+                        d.bank_id, d.bank_name, d.beneficiary, d.currency, d.account_no, d.swift_code,
+                        d.remark, d.company, d.company_address, d.invoice_prefix,
+                        d.functional_currency, d.functional_currency_code,
+                        d.settlement_org, d.org_code
+                    ].join(' ').toLowerCase();
+                    return hay.includes(kw);
+                })
+                : bankDataList.slice();
+            renderBankPage();
+        }
+
+        // 渲染指定页列表
+        function renderBankPage() {
+            const body = document.getElementById('bankListBody');
+            const total = bankFilteredList.length;
+            const totalPages = Math.max(1, Math.ceil(total / BANK_PAGE_SIZE));
+            if (bankCurrentPage > totalPages) bankCurrentPage = totalPages;
+            if (bankCurrentPage < 1) bankCurrentPage = 1;
+
+            const start = (bankCurrentPage - 1) * BANK_PAGE_SIZE;
+            const pageItems = bankFilteredList.slice(start, start + BANK_PAGE_SIZE);
+
+            if (total === 0) {
+                body.innerHTML = `<tr><td colspan="14" class="px-4 py-12 text-center text-gray-400 text-sm">
+                    <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    无匹配的银行记录
+                </td></tr>`;
+            } else {
+                body.innerHTML = pageItems.map(d => {
+                    const isSelected = d._key === bankTempSelectedId;
+                    const rowBg = isSelected ? 'bg-blue-50' : 'hover:bg-blue-50/40';
+                    const stickyBg = isSelected ? 'bg-blue-50' : 'bg-white';
+                    const cell = (v, extraCls = '') => `<td class="px-3 py-3 text-gray-700 whitespace-nowrap ${extraCls}" title="${escapeHtml(v || '')}">${v ? escapeHtml(v) : '<span class="text-gray-300">-</span>'}</td>`;
+                    const cellTrunc = (v, max = 180) => {
+                        const short = v && v.length > 20 ? v.slice(0, 20) + '…' : (v || '');
+                        return `<td class="px-3 py-3 text-gray-700 whitespace-nowrap" style="max-width:${max}px" title="${escapeHtml(v || '')}">${v ? escapeHtml(short) : '<span class="text-gray-300">-</span>'}</td>`;
+                    };
+                    return `
+                    <tr class="bank-row cursor-pointer transition ${rowBg}" 
+                        data-id="${escapeHtml(d._key)}" onclick="pickBankRow('${escapeHtml(d._key).replace(/'/g, "\\'")}')">
+                        <td class="px-3 py-3 text-center sticky left-0 z-10 border-r border-gray-100 ${stickyBg}">
+                            <div class="inline-flex items-center justify-center w-5 h-5 rounded-full border-2 ${isSelected ? 'border-tech-primary bg-tech-primary' : 'border-gray-300 bg-white'} transition">
+                                ${isSelected ? '<svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>' : ''}
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 font-mono text-xs font-semibold text-gray-900 whitespace-nowrap sticky left-12 z-10 border-r border-gray-100 ${stickyBg}" title="${escapeHtml(d.bank_id)}">${d.bank_id ? escapeHtml(d.bank_id) : '<span class="text-gray-300">-</span>'}</td>
+                        ${cell(d.bank_name, 'font-medium text-gray-800')}
+                        ${cell(d.beneficiary)}
+                        ${cell(d.currency, 'font-mono text-xs')}
+                        ${cell(d.account_no, 'font-mono text-xs')}
+                        ${cell(d.swift_code, 'font-mono text-xs')}
+                        ${cellTrunc(d.remark)}
+                        ${cell(d.company)}
+                        ${cellTrunc(d.company_address, 220)}
+                        ${cell(d.invoice_prefix)}
+                        ${cell(d.functional_currency, 'font-mono text-xs')}
+                        ${cell(d.functional_currency_code, 'font-mono text-xs')}
+                        ${cell(d.settlement_org)}
+                        ${cell(d.org_code, 'font-mono text-xs')}
+                    </tr>`;
+                }).join('');
+            }
+
+            // 分页信息
+            const endIdx = Math.min(start + BANK_PAGE_SIZE, total);
+            document.getElementById('bankPageInfo').innerText = total === 0
+                ? '无数据' : `显示 ${start + 1} - ${endIdx} 条,共 ${total} 条`;
+
+            // 上一页 / 下一页按钮状态
+            document.getElementById('bankPagePrev').disabled = bankCurrentPage <= 1;
+            document.getElementById('bankPageNext').disabled = bankCurrentPage >= totalPages;
+
+            // 页码按钮(最多显示 5 个)
+            renderBankPageNumbers(totalPages);
+        }
+
+        function renderBankPageNumbers(totalPages) {
+            const wrap = document.getElementById('bankPageNumbers');
+            if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+            let pages = [];
+            const cur = bankCurrentPage;
+            if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i);
+            } else {
+                pages.push(1);
+                if (cur > 3) pages.push('...');
+                for (let i = Math.max(2, cur - 1); i <= Math.min(totalPages - 1, cur + 1); i++) pages.push(i);
+                if (cur < totalPages - 2) pages.push('...');
+                pages.push(totalPages);
+            }
+            wrap.innerHTML = pages.map(p => {
+                if (p === '...') return '<span class="px-2 text-gray-400 text-xs">...</span>';
+                const active = p === cur;
+                return `<button onclick="gotoBankPage(${p})" class="min-w-[28px] h-7 px-2 text-xs font-medium rounded transition ${active ? 'bg-tech-primary text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}">${p}</button>`;
+            }).join('');
+        }
+
+        function changeBankPage(delta) {
+            bankCurrentPage += delta;
+            renderBankPage();
+            // 滚回顶部
+            document.getElementById('bankListScroll').scrollTop = 0;
+        }
+        function gotoBankPage(p) {
+            bankCurrentPage = p;
+            renderBankPage();
+            document.getElementById('bankListScroll').scrollTop = 0;
+        }
+
+        // 点击行:单选(只在弹框内,未确认前不回填)
+        function pickBankRow(id) {
+            bankTempSelectedId = id;
+            updateSelectedPreview();
+            renderBankPage(); // 重绘以更新选中样式
+        }
+
+        function updateSelectedPreview() {
+            const preview = document.getElementById('bankSelectedPreview');
+            const btn = document.getElementById('bankConfirmBtn');
+            const picked = bankDataList.find(d => d._key === bankTempSelectedId);
+            if (picked) {
+                const idPart = picked.bank_id || picked._key;
+                preview.innerHTML = `<span class="font-mono">${escapeHtml(idPart)}</span> <span class="text-gray-400 font-normal mx-1">·</span> <span class="text-gray-600 font-medium">${escapeHtml(picked.bank_name)}</span>`;
+                preview.className = 'ml-2 font-bold text-tech-primary';
+                btn.disabled = false;
+            } else {
+                preview.innerText = '未选择';
+                preview.className = 'ml-2 font-bold text-gray-400';
+                btn.disabled = true;
+            }
+        }
+
+        // 确认选择:回填到输入框 + 联动填 Swift/Account
+        function confirmBankSelection() {
+            const picked = bankDataList.find(d => d._key === bankTempSelectedId);
+            if (!picked) return;
+            // 输入框显示接口的 ID 字段;隐藏域也存 bank_id 用于提交
+            const displayId = picked.bank_id || picked._key;
+            document.getElementById('bankIdSelect').value = displayId;
+            document.getElementById('bankIdInput').value = displayId;
+            // 联动填充
+            const swift = document.getElementById('swiftCode');
+            const acc = document.getElementById('accNo');
+            swift.value = picked.swift_code || '';
+            acc.value = picked.account_no || '';
+            swift.className = acc.className = "tech-input readonly-field bg-blue-50/50 font-bold text-tech-primary border-blue-200";
+            closeBankModal();
+        }
+
+        // 兼容旧调用:原来的 ensureBanks 如果还被其他地方调用,保留为打开弹框
+        function ensureBanks() { openBankModal(); }
+        function fillBankInfo() { /* 已由 confirmBankSelection 接管 */ }
+
+        // ================= Charge Code 选择弹框(服务端分页 + 独立搜索) =================
+        // 接口:https://wls.zh1gl.com/api/crdnprinter/index?tabcode=archive&tablecode=6&page=1&pagesize=10
+        // 每次翻页 / 搜索都重新请求接口
+        let chargeCodeDataList = [];          // 当前页数据
+        let chargeCodeCurrentPage = 1;
+        let chargeCodeTotalCount = 0;         // 总条数(服务端返回)
+        let chargeCodeTotalPages = 1;         // 总页数
+        const CHARGE_CODE_PAGE_SIZE = 10;
+        let chargeCodeTempSelectedKey = '';   // 弹框内临时选中
+        let chargeCodeTempSelectedRow = null; // 临时选中的完整记录(用于跨页保留)
+        let chargeCodeTargetFeeKey = '';      // 当前正在为哪个 fee 选择
+        let chargeCodeSearchCode = '';        // Charge Code 搜索关键词
+        let chargeCodeSearchItem = '';        // Charge Item 搜索关键词
+        let chargeCodeSearchJks = '';         // JKS_QUOTE_CODE 搜索关键词
+        let chargeCodeSearchTimer = null;     // debounce 定时器
+        let chargeCodeReqSeq = 0;             // 请求序号,用于抛弃过期响应
+        // chargeCodeSelections 已在 generateChargeCodeUI 之前初始化到 window 上
+        var chargeCodeSelections = window.chargeCodeSelections;
+
+        function openChargeCodeModal(feeKey) {
+            chargeCodeTargetFeeKey = feeKey;
+            document.getElementById('chargeCodeTargetFee').innerText = feeKey;
+            // 若该 fee 之前已选过,恢复临时选中为之前的值
+            const prev = chargeCodeSelections[feeKey];
+            chargeCodeTempSelectedKey = prev ? prev._key : '';
+            chargeCodeTempSelectedRow = prev ? Object.assign({}, prev) : null;
+            // 清空搜索关键词和输入框
+            chargeCodeSearchCode = '';
+            chargeCodeSearchItem = '';
+            chargeCodeSearchJks = '';
+            const codeInp = document.getElementById('chargeCodeSearchCode');
+            const itemInp = document.getElementById('chargeCodeSearchItem');
+            const jksInp = document.getElementById('chargeCodeSearchJks');
+            if (codeInp) codeInp.value = '';
+            if (itemInp) itemInp.value = '';
+            if (jksInp) jksInp.value = '';
+            document.getElementById('chargeCodeClearCode').classList.add('hidden');
+            document.getElementById('chargeCodeClearItem').classList.add('hidden');
+            document.getElementById('chargeCodeClearJks').classList.add('hidden');
+            chargeCodeCurrentPage = 1;
+            updateChargeCodeSelectedPreview();
+            const modal = document.getElementById('chargeCodeModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            loadChargeCodes();
+        }
+
+        function closeChargeCodeModal() {
+            const modal = document.getElementById('chargeCodeModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // 发起服务端请求:支持 page / pagesize / 搜索关键词
+        async function loadChargeCodes() {
+            const body = document.getElementById('chargeCodeListBody');
+            const subtitle = document.getElementById('chargeCodeModalSubtitle');
+            subtitle.innerText = `正在加载第 ${chargeCodeCurrentPage} 页...`;
+            body.innerHTML = `<tr><td colspan="15" class="px-4 py-12 text-center text-gray-400 text-sm">
+                <div class="inline-flex items-center gap-2"><div class="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin"></div>正在加载第 ${chargeCodeCurrentPage} 页...</div>
+            </td></tr>`;
+            // 构造请求 URL
+            const params = new URLSearchParams({
+                tabcode: 'archive',
+                tablecode: '6',
+                page: String(chargeCodeCurrentPage),
+                pagesize: String(CHARGE_CODE_PAGE_SIZE)
+            });
+            // 搜索关键词:服务端分页条件下必须作为参数传给后端
+            // Charge Code 搜索使用 charge_code_internal 字段(与列表字段映射保持一致)
+            if (chargeCodeSearchCode) {
+                params.append('charge_code_internal', chargeCodeSearchCode);
+                params.append('chargeCodeInternal', chargeCodeSearchCode);
+            }
+            if (chargeCodeSearchItem) {
+                params.append('charge_item', chargeCodeSearchItem);
+                params.append('chargeItem', chargeCodeSearchItem);
+            }
+            if (chargeCodeSearchJks) {
+                params.append('jks_quote_code', chargeCodeSearchJks);
+                params.append('JKS_QUOTE_CODE', chargeCodeSearchJks);
+                params.append('jksQuoteCode', chargeCodeSearchJks);
+            }
+            const url = 'https://wls.zh1gl.com/api/crdnprinter/index?' + params.toString();
+            const mySeq = ++chargeCodeReqSeq; // 记录当前请求序号
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                if (mySeq !== chargeCodeReqSeq) return; // 过期响应,丢弃
+
+                if (json.code !== undefined && json.code !== 1 && json.code !== 0 && json.code !== 200) {
+                    throw new Error('接口错误: ' + (json.msg || 'unknown'));
+                }
+                const payload = json.data !== undefined ? json.data : json;
+                const DEFAULT_TOTAL = 2272; // 接口未返回 total 时使用的兜底总数
+                let list = [];
+                let total = 0;
+                // 兼容多种分页响应结构
+                if (Array.isArray(payload)) {
+                    list = payload;
+                    total = DEFAULT_TOTAL; // 无总数字段时使用兜底
+                } else if (payload && typeof payload === 'object') {
+                    // 常见结构:{list: [...], total: N} / {data: [...], total: N} / {rows: [...], total: N}
+                    if (Array.isArray(payload.list)) list = payload.list;
+                    else if (Array.isArray(payload.data)) list = payload.data;
+                    else if (Array.isArray(payload.rows)) list = payload.rows;
+                    else if (Array.isArray(payload.records)) list = payload.records;
+                    else list = Object.values(payload).filter(v => v && typeof v === 'object' && !Array.isArray(v));
+                    // 总数字段:优先级 total > totalCount > count > totalRecords;都没有时用兜底值 2272
+                    const rawTotal = Number(payload.total || payload.totalCount || payload.count || payload.totalRecords || 0);
+                    total = rawTotal > 0 ? rawTotal : DEFAULT_TOTAL;
+                }
+
+                chargeCodeTotalCount = total;
+                chargeCodeTotalPages = Math.max(1, Math.ceil(total / CHARGE_CODE_PAGE_SIZE));
+
+                const pick = (o, ...keys) => {
+                    for (const k of keys) {
+                        if (o[k] !== undefined && o[k] !== null && String(o[k]).trim() !== '') return String(o[k]).trim();
+                    }
+                    return '';
+                };
+
+                chargeCodeDataList = list.map((item, idx) => ({
+                    _key:             String(item.id || ((chargeCodeCurrentPage - 1) * CHARGE_CODE_PAGE_SIZE + idx)),
+                    _raw:             item,
+                    jks_quote_code:   pick(item, 'jks_quote_code', 'JKS_QUOTE_CODE', 'jksQuoteCode'),
+                    charge_code:      pick(item, 'charge_code_internal', 'chargeCodeInternal', 'charge_code', 'chargeCode', 'Charge Code'),
+                    kingdee_code:     pick(item, 'kingdee', 'Kingdee', '金蝶'),
+                    customer_project: pick(item, 'customer_project', 'customerProject', 'Customer Project'),
+                    warehouse_name:   pick(item, 'warehouse_name', 'warehouseName', 'Warehouse Name'),
+                    status:           pick(item, 'status', 'Status', '状态'),
+                    unit_price:       pick(item, 'unit_price', 'unitPrice', 'Unit Price'),
+                    currency:         pick(item, 'currency', 'Currency', 'ccy'),
+                    uom:              pick(item, 'uom', 'UoM', 'unit'),
+                    charge_item:      pick(item, 'charge_item', 'chargeItem', 'Charge Item'),
+                    explanation_cn:   pick(item, 'explanation_in_chinese', 'explanationCn', 'explanation_cn', 'Explanation in Chinese', '中文说明'),
+                    kingdee_name:     pick(item, 'kingdee_name', 'kingdeeName', 'Kingdee名称'),
+                    description:      pick(item, 'description', 'Description', '描述'),
+                    price_unit:       pick(item, 'pricing_unit', 'pricingUnit', 'price_unit', 'priceUnit', '计价单位')
+                }));
+
+                subtitle.innerText = `共 ${chargeCodeTotalCount} 条 · 第 ${chargeCodeCurrentPage} / ${chargeCodeTotalPages} 页`;
+                renderChargeCodePage();
+                loadStates.chargeCode = 'loaded';
+                console.log(`✅ Charge Code 第 ${chargeCodeCurrentPage} 页加载:`, chargeCodeDataList.length, '条 / 总', chargeCodeTotalCount);
+            } catch (err) {
+                if (mySeq !== chargeCodeReqSeq) return;
+                console.error('❌ Charge Code 加载失败:', err);
+                loadStates.chargeCode = 'error';
+                subtitle.innerText = '加载失败';
+                body.innerHTML = `<tr><td colspan="15" class="px-4 py-12 text-center">
+                    <div class="text-red-500 text-sm font-medium mb-2">⚠ Charge Code 字典加载失败</div>
+                    <div class="text-xs text-gray-400 mb-4">${escapeHtml(err.message)}</div>
+                    <button onclick="loadChargeCodes()" class="px-4 py-1.5 text-xs font-bold text-white bg-purple-600 rounded hover:bg-purple-700">点击重试</button>
+                </td></tr>`;
+            }
+        }
+
+        // 输入框变化:debounce 300ms 后发起请求(避免每击键一次就请求)
+        function onChargeCodeSearch() {
+            const codeInp = document.getElementById('chargeCodeSearchCode');
+            const itemInp = document.getElementById('chargeCodeSearchItem');
+            const jksInp = document.getElementById('chargeCodeSearchJks');
+            chargeCodeSearchCode = codeInp.value.trim();
+            chargeCodeSearchItem = itemInp.value.trim();
+            chargeCodeSearchJks = jksInp.value.trim();
+            // 显示/隐藏清除按钮
+            document.getElementById('chargeCodeClearCode').classList.toggle('hidden', !chargeCodeSearchCode);
+            document.getElementById('chargeCodeClearItem').classList.toggle('hidden', !chargeCodeSearchItem);
+            document.getElementById('chargeCodeClearJks').classList.toggle('hidden', !chargeCodeSearchJks);
+            if (chargeCodeSearchTimer) clearTimeout(chargeCodeSearchTimer);
+            chargeCodeSearchTimer = setTimeout(() => {
+                chargeCodeCurrentPage = 1; // 搜索条件变化,回到第一页
+                loadChargeCodes();
+            }, 300);
+        }
+
+        function clearChargeCodeSearch(which) {
+            if (which === 'code') {
+                document.getElementById('chargeCodeSearchCode').value = '';
+                chargeCodeSearchCode = '';
+                document.getElementById('chargeCodeClearCode').classList.add('hidden');
+            } else if (which === 'item') {
+                document.getElementById('chargeCodeSearchItem').value = '';
+                chargeCodeSearchItem = '';
+                document.getElementById('chargeCodeClearItem').classList.add('hidden');
+            } else if (which === 'jks') {
+                document.getElementById('chargeCodeSearchJks').value = '';
+                chargeCodeSearchJks = '';
+                document.getElementById('chargeCodeClearJks').classList.add('hidden');
+            }
+            chargeCodeCurrentPage = 1;
+            loadChargeCodes();
+        }
+
+        function renderChargeCodePage() {
+            const body = document.getElementById('chargeCodeListBody');
+            const total = chargeCodeTotalCount;
+
+            if (chargeCodeDataList.length === 0) {
+                body.innerHTML = `<tr><td colspan="15" class="px-4 py-12 text-center text-gray-400 text-sm">
+                    <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    无匹配的 Charge Code 记录
+                </td></tr>`;
+            } else {
+                body.innerHTML = chargeCodeDataList.map(d => {
+                    const isSelected = d._key === chargeCodeTempSelectedKey;
+                    const rowBg = isSelected ? 'bg-purple-50' : 'hover:bg-purple-50/40';
+                    const stickyBg = isSelected ? 'bg-purple-50' : 'bg-white';
+                    const cell = (v, extraCls = '') => `<td class="px-3 py-3 text-gray-700 whitespace-nowrap ${extraCls}" title="${escapeHtml(v || '')}">${v ? escapeHtml(v) : '<span class="text-gray-300">-</span>'}</td>`;
+                    const cellTrunc = (v, max = 200) => {
+                        const short = v && v.length > 28 ? v.slice(0, 28) + '…' : (v || '');
+                        return `<td class="px-3 py-3 text-gray-700 whitespace-nowrap" style="max-width:${max}px" title="${escapeHtml(v || '')}">${v ? escapeHtml(short) : '<span class="text-gray-300">-</span>'}</td>`;
+                    };
+                    return `
+                    <tr class="charge-row cursor-pointer transition ${rowBg}"
+                        data-id="${escapeHtml(d._key)}" onclick="pickChargeCodeRow('${escapeHtml(d._key).replace(/'/g, "\\'")}')">
+                        <td class="px-3 py-3 text-center sticky left-0 z-10 border-r border-gray-100 ${stickyBg}">
+                            <div class="inline-flex items-center justify-center w-5 h-5 rounded-full border-2 ${isSelected ? 'border-purple-600 bg-purple-600' : 'border-gray-300 bg-white'} transition">
+                                ${isSelected ? '<svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>' : ''}
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 font-mono text-xs font-semibold text-gray-900 whitespace-nowrap sticky left-12 z-10 border-r border-gray-100 ${stickyBg}" title="${escapeHtml(d.jks_quote_code)}">${d.jks_quote_code ? escapeHtml(d.jks_quote_code) : '<span class="text-gray-300">-</span>'}</td>
+                        ${cell(d.charge_code, 'font-mono text-xs font-bold text-purple-700')}
+                        ${cell(d.kingdee_code, 'font-mono text-xs')}
+                        ${cell(d.customer_project)}
+                        ${cell(d.warehouse_name)}
+                        ${cell(d.status)}
+                        ${cell(d.unit_price, 'font-mono text-xs text-right')}
+                        ${cell(d.currency, 'font-mono text-xs')}
+                        ${cell(d.uom)}
+                        ${cell(d.charge_item)}
+                        ${cellTrunc(d.explanation_cn, 240)}
+                        ${cell(d.kingdee_name)}
+                        ${cellTrunc(d.description, 240)}
+                        ${cell(d.price_unit)}
+                    </tr>`;
+                }).join('');
+            }
+
+            // 分页信息
+            const start = (chargeCodeCurrentPage - 1) * CHARGE_CODE_PAGE_SIZE;
+            const endIdx = Math.min(start + chargeCodeDataList.length, total);
+            document.getElementById('chargeCodePageInfo').innerText = total === 0
+                ? '无数据' : `显示 ${start + 1} - ${endIdx} 条,共 ${total} 条`;
+            document.getElementById('chargeCodePagePrev').disabled = chargeCodeCurrentPage <= 1;
+            document.getElementById('chargeCodePageNext').disabled = chargeCodeCurrentPage >= chargeCodeTotalPages;
+            renderChargeCodePageNumbers(chargeCodeTotalPages);
+        }
+
+        function renderChargeCodePageNumbers(totalPages) {
+            const wrap = document.getElementById('chargeCodePageNumbers');
+            if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+            let pages = [];
+            const cur = chargeCodeCurrentPage;
+            if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i);
+            } else {
+                pages.push(1);
+                if (cur > 3) pages.push('...');
+                for (let i = Math.max(2, cur - 1); i <= Math.min(totalPages - 1, cur + 1); i++) pages.push(i);
+                if (cur < totalPages - 2) pages.push('...');
+                pages.push(totalPages);
+            }
+            wrap.innerHTML = pages.map(p => {
+                if (p === '...') return '<span class="px-2 text-gray-400 text-xs">...</span>';
+                const active = p === cur;
+                return `<button onclick="gotoChargeCodePage(${p})" class="min-w-[28px] h-7 px-2 text-xs font-medium rounded transition ${active ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}">${p}</button>`;
+            }).join('');
+        }
+
+        function changeChargeCodePage(delta) {
+            const next = chargeCodeCurrentPage + delta;
+            if (next < 1 || next > chargeCodeTotalPages) return;
+            chargeCodeCurrentPage = next;
+            loadChargeCodes();
+            document.getElementById('chargeCodeListScroll').scrollTop = 0;
+        }
+        function gotoChargeCodePage(p) {
+            if (p === chargeCodeCurrentPage) return;
+            chargeCodeCurrentPage = p;
+            loadChargeCodes();
+            document.getElementById('chargeCodeListScroll').scrollTop = 0;
+        }
+
+        function pickChargeCodeRow(key) {
+            chargeCodeTempSelectedKey = key;
+            // 服务端分页下:临时选中的记录需要保存副本,因为翻页会丢失当前页数据
+            const found = chargeCodeDataList.find(d => d._key === key);
+            if (found) chargeCodeTempSelectedRow = Object.assign({}, found);
+            updateChargeCodeSelectedPreview();
+            renderChargeCodePage();
+        }
+
+        function updateChargeCodeSelectedPreview() {
+            const preview = document.getElementById('chargeCodeSelectedPreview');
+            const btn = document.getElementById('chargeCodeConfirmBtn');
+            // 优先用当前页匹配的记录,否则用临时保存的副本(用于跨页保留选择)
+            const picked = chargeCodeDataList.find(d => d._key === chargeCodeTempSelectedKey) || chargeCodeTempSelectedRow;
+            if (picked && chargeCodeTempSelectedKey) {
+                const codePart = picked.charge_code ? `<span class="font-mono text-purple-700">${escapeHtml(picked.charge_code)}</span>` : '';
+                const itemPart = picked.charge_item ? ` <span class="text-gray-400 font-normal mx-1">·</span> <span class="text-gray-700 font-medium">${escapeHtml(picked.charge_item)}</span>` : '';
+                preview.innerHTML = (codePart + itemPart) || '<span class="text-gray-400">已选记录无 Charge Code</span>';
+                preview.className = 'ml-2 font-bold';
+                btn.disabled = false;
+            } else {
+                preview.innerText = '未选择';
+                preview.className = 'ml-2 font-bold text-gray-400';
+                btn.disabled = true;
+            }
+        }
+
+        function confirmChargeCodeSelection() {
+            // 使用临时保存的完整记录(支持跨页选择)
+            const picked = chargeCodeTempSelectedRow || chargeCodeDataList.find(d => d._key === chargeCodeTempSelectedKey);
+            if (!picked || !chargeCodeTargetFeeKey) return;
+            // 保存完整记录(提交后端时使用)
+            chargeCodeSelections[chargeCodeTargetFeeKey] = Object.assign({}, picked);
+            // 回填输入框 value = charge_code
+            const row = document.querySelector(`tr[data-fee-key="${CSS.escape(chargeCodeTargetFeeKey)}"]`);
+            if (row) {
+                const inp = row.querySelector('.charge-input');
+                if (inp) inp.value = picked.charge_code || '';
+                const dot = row.querySelector('td:first-child > div');
+                if (dot) { dot.classList.remove('bg-gray-300'); dot.classList.add('bg-purple-500'); }
+            }
+            refreshMappingCounts();
+            closeChargeCodeModal();
+        }
+
+        // ESC 关闭 + 点击遮罩关闭
+        document.getElementById('chargeCodeModal').addEventListener('click', function(e) {
+            if (e.target === this) closeChargeCodeModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const m = document.getElementById('chargeCodeModal');
+                if (m && !m.classList.contains('hidden')) closeChargeCodeModal();
+            }
+        });
+
+        // 提供给后续"确认策略并启动自动生成"按钮使用
+        window.getChargeCodeMappings = function() {
+            return Object.keys(chargeCodeSelections).map(feeKey => {
+                const rec = chargeCodeSelections[feeKey];
+                return Object.assign({ fee_name: feeKey }, rec);
+            });
+        };
+
+        // ================= 开票汇率索引 选择弹框(服务端分页 + 单选) =================
+        // 接口:https://wls.zh1gl.com/api/crdnprinter/index?tabcode=forms3&tablecode=5&page=N&pagesize=10
+        // 选中后:流水ID(serial_id) 回显到 #invoiceExRateIndex
+        let exRateDataList = [];            // 当前页数据
+        let exRateCurrentPage = 1;
+        let exRateTotalCount = 0;
+        let exRateTotalPages = 1;
+        const EX_RATE_PAGE_SIZE = 10;
+        const EX_RATE_DEFAULT_TOTAL = 4250; // 接口未返回 total 时的兜底
+        let exRateTempSelectedKey = '';
+        let exRateTempSelectedRow = null;
+        let exRateSearchKw = '';
+        let exRateSearchTimer = null;
+        let exRateReqSeq = 0;
+
+        function openExRateModal() {
+            // 清空搜索 + 回到第 1 页
+            exRateSearchKw = '';
+            const searchInp = document.getElementById('exRateSearchInput');
+            if (searchInp) searchInp.value = '';
+            exRateCurrentPage = 1;
+            // 恢复之前已选值(如果有)
+            const prevVal = document.getElementById('invoiceExRateIndex').value;
+            exRateTempSelectedKey = '';
+            exRateTempSelectedRow = null;
+            if (prevVal && window.lastExRateSelected && window.lastExRateSelected.serial_id === prevVal) {
+                exRateTempSelectedKey = window.lastExRateSelected._key;
+                exRateTempSelectedRow = window.lastExRateSelected;
+            }
+            updateExRateSelectedPreview();
+            const modal = document.getElementById('exRateModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            loadExRates();
+        }
+
+        function closeExRateModal() {
+            const modal = document.getElementById('exRateModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function loadExRates() {
+            const body = document.getElementById('exRateListBody');
+            const subtitle = document.getElementById('exRateModalSubtitle');
+            subtitle.innerText = `正在加载第 ${exRateCurrentPage} 页...`;
+            body.innerHTML = `<tr><td colspan="11" class="px-4 py-12 text-center text-gray-400 text-sm">
+                <div class="inline-flex items-center gap-2"><div class="w-4 h-4 border-2 border-amber-300 border-t-amber-600 rounded-full animate-spin"></div>正在加载第 ${exRateCurrentPage} 页...</div>
+            </td></tr>`;
+
+            const params = new URLSearchParams({
+                tabcode: 'forms3',
+                tablecode: '5',
+                page: String(exRateCurrentPage),
+                pagesize: String(EX_RATE_PAGE_SIZE)
+            });
+            // 搜索关键词
+            if (exRateSearchKw) {
+                params.append('keyword', exRateSearchKw);
+                params.append('search', exRateSearchKw);
+            }
+            const url = 'https://wls.zh1gl.com/api/crdnprinter/index?' + params.toString();
+            const mySeq = ++exRateReqSeq;
+
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                if (mySeq !== exRateReqSeq) return; // 过期响应丢弃
+                if (json.code !== undefined && json.code !== 1 && json.code !== 0 && json.code !== 200) {
+                    throw new Error('接口错误: ' + (json.msg || 'unknown'));
+                }
+                const payload = json.data !== undefined ? json.data : json;
+                let list = [];
+                let total = 0;
+                if (Array.isArray(payload)) {
+                    list = payload;
+                    total = EX_RATE_DEFAULT_TOTAL;
+                } else if (payload && typeof payload === 'object') {
+                    if (Array.isArray(payload.list)) list = payload.list;
+                    else if (Array.isArray(payload.data)) list = payload.data;
+                    else if (Array.isArray(payload.rows)) list = payload.rows;
+                    else if (Array.isArray(payload.records)) list = payload.records;
+                    else list = Object.values(payload).filter(v => v && typeof v === 'object' && !Array.isArray(v));
+                    const rawTotal = Number(payload.total || payload.totalCount || payload.count || payload.totalRecords || 0);
+                    total = rawTotal > 0 ? rawTotal : EX_RATE_DEFAULT_TOTAL;
+                }
+                exRateTotalCount = total;
+                exRateTotalPages = Math.max(1, Math.ceil(total / EX_RATE_PAGE_SIZE));
+
+                const pick = (o, ...keys) => {
+                    for (const k of keys) {
+                        if (o[k] !== undefined && o[k] !== null && String(o[k]).trim() !== '') return String(o[k]).trim();
+                    }
+                    return '';
+                };
+
+                exRateDataList = list.map((item, idx) => ({
+                    _key:          String(item.id || ((exRateCurrentPage - 1) * EX_RATE_PAGE_SIZE + idx)),
+                    _raw:          item,
+                    // 流水ID
+                    serial_id:     pick(item, 'seq', 'Seq', 'SEQ'),
+                    // 周数
+                    week_num:      pick(item, 'z_s', 'zS'),
+                    project_code:  pick(item, 'project_code', 'projectCode', 'project_no', 'projectNo', '项目编号'),
+                    bill_currency: pick(item, 'bill_currency', 'billCurrency', 'billing_currency', 'billingCurrency', '账单计费币种'),
+                    invoice_currency: pick(item, 'invoice_currency', 'invoiceCurrency', '开票币种'),
+                    // 数值
+                    rate_value:    pick(item, 'amount', 'Amount', 'AMOUNT'),
+                    // 开票字段
+                    invoice_field: pick(item, 'k_p_z_d', 'kPZD'),
+                    convert_desc:  pick(item, 'convert_desc', 'convertDesc', 'description', '转换描述'),
+                    update_date:   pick(item, 'update_date', 'updateDate', 'updatetime', 'updateTime', '更新日期'),
+                    create_date:   pick(item, 'create_date', 'createDate', 'createtime', 'createTime', '创建日期')
+                }));
+
+                subtitle.innerText = `共 ${exRateTotalCount} 条 · 第 ${exRateCurrentPage} / ${exRateTotalPages} 页`;
+                renderExRatePage();
+                console.log(`✅ 开票汇率索引 第 ${exRateCurrentPage} 页加载:`, exRateDataList.length, '条');
+            } catch (err) {
+                if (mySeq !== exRateReqSeq) return;
+                console.error('❌ 开票汇率索引 加载失败:', err);
+                subtitle.innerText = '加载失败';
+                body.innerHTML = `<tr><td colspan="11" class="px-4 py-12 text-center">
+                    <div class="text-red-500 text-sm font-medium mb-2">⚠ 开票汇率索引加载失败</div>
+                    <div class="text-xs text-gray-400 mb-4">${escapeHtml(err.message)}</div>
+                    <button onclick="loadExRates()" class="px-4 py-1.5 text-xs font-bold text-white bg-amber-600 rounded hover:bg-amber-700">点击重试</button>
+                </td></tr>`;
+            }
+        }
+
+        function onExRateSearch() {
+            const inp = document.getElementById('exRateSearchInput');
+            exRateSearchKw = inp.value.trim();
+            if (exRateSearchTimer) clearTimeout(exRateSearchTimer);
+            exRateSearchTimer = setTimeout(() => {
+                exRateCurrentPage = 1;
+                loadExRates();
+            }, 300);
+        }
+
+        function renderExRatePage() {
+            const body = document.getElementById('exRateListBody');
+            const total = exRateTotalCount;
+            if (exRateDataList.length === 0) {
+                body.innerHTML = `<tr><td colspan="11" class="px-4 py-12 text-center text-gray-400 text-sm">
+                    <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    无匹配的汇率索引记录
+                </td></tr>`;
+            } else {
+                body.innerHTML = exRateDataList.map(d => {
+                    const isSelected = d._key === exRateTempSelectedKey;
+                    const rowBg = isSelected ? 'bg-amber-50' : 'hover:bg-amber-50/40';
+                    const stickyBg = isSelected ? 'bg-amber-50' : 'bg-white';
+                    const cell = (v, extraCls = '') => `<td class="px-3 py-3 text-gray-700 whitespace-nowrap ${extraCls}" title="${escapeHtml(v || '')}">${v ? escapeHtml(v) : '<span class="text-gray-300">-</span>'}</td>`;
+                    const cellTrunc = (v, max = 200) => {
+                        const short = v && v.length > 24 ? v.slice(0, 24) + '…' : (v || '');
+                        return `<td class="px-3 py-3 text-gray-700 whitespace-nowrap" style="max-width:${max}px" title="${escapeHtml(v || '')}">${v ? escapeHtml(short) : '<span class="text-gray-300">-</span>'}</td>`;
+                    };
+                    return `
+                    <tr class="exrate-row cursor-pointer transition ${rowBg}"
+                        data-id="${escapeHtml(d._key)}" onclick="pickExRateRow('${escapeHtml(d._key).replace(/'/g, "\\'")}')">
+                        <td class="px-3 py-3 text-center sticky left-0 z-10 border-r border-gray-100 ${stickyBg}">
+                            <div class="inline-flex items-center justify-center w-5 h-5 rounded-full border-2 ${isSelected ? 'border-amber-600 bg-amber-600' : 'border-gray-300 bg-white'} transition">
+                                ${isSelected ? '<svg class="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>' : ''}
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 font-mono text-xs font-semibold text-gray-900 whitespace-nowrap sticky left-12 z-10 border-r border-gray-100 ${stickyBg}" title="${escapeHtml(d.serial_id)}">${d.serial_id ? escapeHtml(d.serial_id) : '<span class="text-gray-300">-</span>'}</td>
+                        ${cell(d.week_num)}
+                        ${cell(d.project_code, 'font-mono text-xs')}
+                        ${cell(d.bill_currency, 'font-mono text-xs')}
+                        ${cell(d.invoice_currency, 'font-mono text-xs')}
+                        ${cell(d.rate_value, 'font-mono text-xs text-right')}
+                        ${cell(d.invoice_field)}
+                        ${cellTrunc(d.convert_desc, 240)}
+                        ${cell(d.update_date, 'font-mono text-xs')}
+                        ${cell(d.create_date, 'font-mono text-xs')}
+                    </tr>`;
+                }).join('');
+            }
+            const start = (exRateCurrentPage - 1) * EX_RATE_PAGE_SIZE;
+            const endIdx = Math.min(start + exRateDataList.length, total);
+            document.getElementById('exRatePageInfo').innerText = total === 0
+                ? '无数据' : `显示 ${start + 1} - ${endIdx} 条,共 ${total} 条`;
+            document.getElementById('exRatePagePrev').disabled = exRateCurrentPage <= 1;
+            document.getElementById('exRatePageNext').disabled = exRateCurrentPage >= exRateTotalPages;
+            renderExRatePageNumbers(exRateTotalPages);
+        }
+
+        function renderExRatePageNumbers(totalPages) {
+            const wrap = document.getElementById('exRatePageNumbers');
+            if (totalPages <= 1) { wrap.innerHTML = ''; return; }
+            let pages = [];
+            const cur = exRateCurrentPage;
+            if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i);
+            } else {
+                pages.push(1);
+                if (cur > 3) pages.push('...');
+                for (let i = Math.max(2, cur - 1); i <= Math.min(totalPages - 1, cur + 1); i++) pages.push(i);
+                if (cur < totalPages - 2) pages.push('...');
+                pages.push(totalPages);
+            }
+            wrap.innerHTML = pages.map(p => {
+                if (p === '...') return '<span class="px-2 text-gray-400 text-xs">...</span>';
+                const active = p === cur;
+                return `<button onclick="gotoExRatePage(${p})" class="min-w-[28px] h-7 px-2 text-xs font-medium rounded transition ${active ? 'bg-amber-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}">${p}</button>`;
+            }).join('');
+        }
+
+        function changeExRatePage(delta) {
+            const next = exRateCurrentPage + delta;
+            if (next < 1 || next > exRateTotalPages) return;
+            exRateCurrentPage = next;
+            loadExRates();
+            document.getElementById('exRateListScroll').scrollTop = 0;
+        }
+        function gotoExRatePage(p) {
+            if (p === exRateCurrentPage) return;
+            exRateCurrentPage = p;
+            loadExRates();
+            document.getElementById('exRateListScroll').scrollTop = 0;
+        }
+
+        function pickExRateRow(key) {
+            exRateTempSelectedKey = key;
+            const found = exRateDataList.find(d => d._key === key);
+            if (found) exRateTempSelectedRow = Object.assign({}, found);
+            updateExRateSelectedPreview();
+            renderExRatePage();
+        }
+
+        function updateExRateSelectedPreview() {
+            const preview = document.getElementById('exRateSelectedPreview');
+            const btn = document.getElementById('exRateConfirmBtn');
+            const picked = exRateDataList.find(d => d._key === exRateTempSelectedKey) || exRateTempSelectedRow;
+            if (picked && exRateTempSelectedKey) {
+                const idPart = picked.serial_id ? `<span class="font-mono text-amber-700">${escapeHtml(picked.serial_id)}</span>` : '<span class="text-gray-400">(无流水ID)</span>';
+                const descPart = picked.convert_desc ? ` <span class="text-gray-400 font-normal mx-1">·</span> <span class="text-gray-700 font-medium">${escapeHtml(picked.convert_desc)}</span>` : '';
+                preview.innerHTML = idPart + descPart;
+                preview.className = 'ml-2 font-bold';
+                btn.disabled = false;
+            } else {
+                preview.innerText = '未选择';
+                preview.className = 'ml-2 font-bold text-gray-400';
+                btn.disabled = true;
+            }
+        }
+
+        function confirmExRateSelection() {
+            const picked = exRateTempSelectedRow || exRateDataList.find(d => d._key === exRateTempSelectedKey);
+            if (!picked) return;
+            // 回显流水ID 到 输入框
+            const serialId = picked.serial_id || '';
+            document.getElementById('invoiceExRateIndex').value = serialId;
+            // 保存完整记录便于后续读取和跨页恢复
+            window.lastExRateSelected = Object.assign({}, picked);
+            closeExRateModal();
+        }
+
+        // ESC + 点击遮罩关闭
+        document.getElementById('exRateModal').addEventListener('click', function(e) {
+            if (e.target === this) closeExRateModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const m = document.getElementById('exRateModal');
+                if (m && !m.classList.contains('hidden')) closeExRateModal();
+            }
+        });
+
+        function triggerAIPhase1() {
+            runFakeAILogging("AI 正在计算语义矩阵与费用映射...", ["加载全局自然语言匹配权重池...", "执行多维文本相似度算法 (TF-IDF)...", "提取数据明细 [费用项目] 聚类节点...", "建立 Charge Code 字典映射关联 (Confidence > 98%)...", "生成决策策略完毕。"], () => changeStep(2));
+        }
+
+        // ================= 提交账单 Payload 组装 + API 保存 =================
+        // 主表字段(根据 rsave 接口约定)的空值模板,保证所有字段都在请求体里
+        const MAIN_TABLE_TEMPLATE = {
+            biz_dept: "", settle_status: "未核销", server: "", h_x_time: "", group: "",
+            s_w_invoice_no_m: "", s_p_attach: "", cw_inv_no: "", dept_approve: "",
+            invoice_status: "", payee: "", d_x2f_n: "", invoice_tax_rate: "", ex_rate_h_s: "",
+            bill_to: "", invoice_no: "", invoice_ex_rate_s_y: "", z_h_b_w_b_s_s: "",
+            address: "", cus_ref_code: "", tel: "", invoice_date: "", attn: "", due_date: "",
+            overdue_setting: "", ref: "", income_type: "", createtime: "", reference_information: "",
+            ex_rate_type: "", updatetime: "", shipper: "", order_no: "", invoice_type: "",
+            consignee: "", vessel_x2f_voyage: "", d_j_type: "YSD01_SYS", place_of_loading: "",
+            shipping_date: "", place_of_receipt: "", place_of_delivery: "", ship_mode: "",
+            z_w_type: "", etd: "", eta: "", weight: "", volume: "", is_z_invoice: "",
+            have_questions: "", package: "", unit: "", is_z_payment_s_q: "", bill_attach_s_c: "",
+            b_x2f_l_no: "", container_no: "", invoice_data_source: "", invoice_data_source_1: "",
+            cargo_picked_up: "", mark_amp_p_o: "", model: "", is_d_k: "", upload_t_z: "",
+            customer_billing_no: "", sub_customer_name: "", d_k_cn_no: "", hbl: "", data_belong: "",
+            total: "", exchange_rate: "", org_d_m: "",
+            settle_org_x2f_x_s_org_x2f_receipt_org: "", b_w_b: "", bank_name: "", g_s_name: "",
+            bank_address: "", g_s_addr: "", logo: "", swift_code: "", b_b: "", beneficiary: "",
+            invoice_currency: "", account_no: "", invoice_q_z: "",
+            ach_x2f_domestic_wire_routing_no: "", prepared_by: "", stamp: "", bankid: "",
+            approval_status: "N", _it_src_table: "",
+            approval_start_time: "", approval_end_time: "",
+            approval_submitter: "", approval_submitter_name: ""
+        };
+
+        // 子表字段空值模板
+        const SUB_TABLE_TEMPLATE = {
+            charge_item: "", ref: "", uom: "", unit_price: "", qty: "", currency: "",
+            amount: "", invoice_amount: "", charge_model: "", kingdee: "", server: "",
+            group: "", customer_no: "", track_no: "", zone: "", fin_charge_code: "",
+            kingdee_name: "", description: "", explanation_in_chinese: "", pricing_unit: "",
+            _from_subragicid: "", remark: "", p_x: ""
+        };
+
+        // Semantic Mapping 里 sysField.id → 子表字段名的映射
+        // 因为 systemFields 是从 Ragic 接口动态拉的,这里用 id 包含的关键词进行模糊匹配
+        // 返回一个表:源表头名(Excel 列名) → 子表目标字段名
+        function buildSemanticMap() {
+            const rows = document.querySelectorAll('#mappingBody tr');
+            const map = {}; // { excelHeaderName: subTableFieldName }
+            rows.forEach(tr => {
+                const fieldId = (tr.dataset.fieldId || '').toLowerCase();
+                const sel = tr.querySelector('.semantic-select');
+                if (!sel || !sel.value) return;
+                const header = sel.value; // 附件里的源列名
+                // 根据字段 id 或名字猜测应该落在哪个子表字段
+                const subKey = inferSubTableKey(fieldId, tr);
+                if (subKey) map[header] = subKey;
+            });
+            return map;
+        }
+
+        // 根据 Ragic 动态字段 id 推断子表字段名
+        function inferSubTableKey(fieldId, tr) {
+            const name = (tr.querySelector('td:first-child')?.innerText || '').toLowerCase();
+            const key = (fieldId + ' ' + name).toLowerCase();
+            const rules = [
+                { test: /fee_name|charge\s*item|费用|项目/, target: 'charge_item' },
+                { test: /ref\b|reference|参考/, target: 'ref' },
+                { test: /uom|unit\b|计量/, target: 'uom' },
+                { test: /unit_price|单价/, target: 'unit_price' },
+                { test: /qty|quantity|数量|件数/, target: 'qty' },
+                { test: /currency|币种|货币|ccy/, target: 'currency' },
+                { test: /invoice_amount|发票金额/, target: 'invoice_amount' },
+                { test: /amount|金额|合计|total/, target: 'amount' },
+                { test: /kingdee_name|金蝶名称/, target: 'kingdee_name' },
+                { test: /kingdee|金蝶/, target: 'kingdee' },
+                { test: /description|描述/, target: 'description' },
+                { test: /explanation|中文说明/, target: 'explanation_in_chinese' },
+                { test: /pricing_unit|price_unit|计价单位/, target: 'pricing_unit' },
+                { test: /remark|备注|note/, target: 'remark' },
+                { test: /server|服务/, target: 'server' },
+                { test: /group|客户组|分组/, target: 'group' },
+                { test: /customer_no|客户编号/, target: 'customer_no' },
+                { test: /track_no|追踪/, target: 'track_no' },
+                { test: /zone|区域/, target: 'zone' },
+                { test: /charge_model|计费模式/, target: 'charge_model' },
+                { test: /fin_charge_code|charge\s*code|编码/, target: 'fin_charge_code' }
+            ];
+            for (const r of rules) if (r.test.test(key)) return r.target;
+            return null;
+        }
+
+        // 收集主表字段:从全局参数区和开票策略区读取
+        function collectMainTableFields() {
+            const main = Object.assign({}, MAIN_TABLE_TEMPLATE);
+
+            // 开票策略
+            const invoiceTypeSel = document.querySelector('#step-2 select');
+            if (invoiceTypeSel) main.invoice_type = invoiceTypeSel.value || '';
+
+            // 全局参数 - 收账单方
+            main.payee    = (document.getElementById('payeeInput')?.value || '').trim();
+            main.bill_to  = (document.getElementById('customerSelect')?.value || '').trim();
+            main.attn     = (document.getElementById('payeeAttn')?.value || '').trim();
+            main.tel      = (document.getElementById('payeeTel')?.value || '').trim();
+
+            // 从 Payee 弹框的完整记录拿 address 等补充字段
+            const payeeKey = document.getElementById('payeeSelected')?.value;
+            if (payeeKey) {
+                const p = payeeDataList.find(d => d._key === payeeKey);
+                if (p) {
+                    main.address = p.address || '';
+                    // 业务属性的 group 默认和 Payee 的 fin_customer_group 一致(若下面客户组又选了值会覆盖)
+                    main.group = p.fin_customer_group || '';
+                }
+            }
+
+            // 全局参数 - 银行(使用弹框选中的完整记录,而不是输入框里展示的 id)
+            const bankKey = document.getElementById('bankIdSelect')?.value;
+            // 弹框里的完整记录存在 bankDataList 中,通过 bank_id 匹配(因为 bankIdSelect 存的是 bank_id)
+            const bankRec = bankKey ? bankDataList.find(d => (d.bank_id || d._key) === bankKey) : null;
+            if (bankRec) {
+                main.bankid        = bankRec.bank_id || '';
+                main.bank_name     = bankRec.bank_name || '';
+                main.swift_code    = bankRec.swift_code || '';
+                main.account_no    = bankRec.account_no || '';
+                main.beneficiary   = bankRec.beneficiary || '';
+                main.b_w_b         = bankRec.functional_currency || '';
+                main.org_d_m       = bankRec.org_code || '';
+                main.settle_org_x2f_x_s_org_x2f_receipt_org = bankRec.settlement_org || '';
+                main.invoice_q_z   = bankRec.invoice_prefix || '';
+                main.g_s_name      = bankRec.company || '';
+                main.g_s_addr      = bankRec.company_address || '';
+                main.invoice_currency = bankRec.currency || '';
+                main.logo          = bankRec.logo || '';
+            }
+
+            // 业务属性
+            const deptSel = document.getElementById('deptSelect');
+            if (deptSel && deptSel.value) {
+                main.biz_dept = deptSel.selectedOptions[0]?.innerText || '';
+            }
+            const groupSel = document.getElementById('customerGroupSelect');
+            if (groupSel && groupSel.value) {
+                main.group = groupSel.selectedOptions[0]?.innerText || main.group;
+            }
+            main.dept_approve = 'Ivy Lian';
+
+            // 服务地 → 主表 server 字段(取下拉选项的显示文本)
+            const svcSel = document.getElementById('serviceAreaSelect');
+            if (svcSel && svcSel.value) {
+                main.server = svcSel.selectedOptions[0]?.innerText || '';
+            }
+
+            // 用户手动填写的业务属性(必填,空值也写入让校验拦截)
+            main.invoice_ex_rate_s_y = (document.getElementById('invoiceExRateIndex')?.value || '').trim();
+            main.cus_ref_code        = (document.getElementById('cusRefCode')?.value || '').trim();
+
+            // Invoice Date 默认当天(YYYY-MM-DD)
+            const now = new Date();
+            const pad2 = n => String(n).padStart(2, '0');
+            main.invoice_date = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+
+            return main;
+        }
+
+        // 收集子表:每行附件数据 → 一条子表记录
+        function collectSubtableRows() {
+            const semanticMap = buildSemanticMap(); // { excelHeader: subField }
+            // 找到 Charge Item 列对应的 Excel 源列名,用于查 chargeCodeSelections
+            let chargeItemHeader = null;
+            for (const [h, sub] of Object.entries(semanticMap)) {
+                if (sub === 'charge_item') { chargeItemHeader = h; break; }
+            }
+            return fullUploadedData.map(row => {
+                const rec = Object.assign({}, SUB_TABLE_TEMPLATE);
+                // 1) 先按语义映射把附件列塞进去
+                Object.entries(semanticMap).forEach(([excelHeader, subField]) => {
+                    const v = row[excelHeader];
+                    if (v !== undefined && v !== null) rec[subField] = String(v);
+                });
+                // 2) 根据本行的 Charge Item 查 Charge Code 弹框里选的完整记录,覆盖相关字段
+                if (chargeItemHeader) {
+                    const feeName = String(row[chargeItemHeader] || '').trim();
+                    const ccPick = window.chargeCodeSelections && window.chargeCodeSelections[feeName];
+                    if (ccPick) {
+                        // fin_charge_code 用 charge_code_internal(列表里的 charge_code 字段)
+                        rec.fin_charge_code         = ccPick.charge_code || rec.fin_charge_code;
+                        // charge_model 用 Charge Code 弹框记录中的 JKS_QUOTE_CODE 字段
+                        rec.charge_model            = ccPick.jks_quote_code || rec.charge_model;
+                        rec.kingdee                 = ccPick.kingdee_code || rec.kingdee;
+                        rec.kingdee_name            = ccPick.kingdee_name || rec.kingdee_name;
+                        // description 用 charge_item 作为 fallback(原模板里示例就是 "DOC" 这种短 code)
+                        rec.description             = ccPick.description || ccPick.charge_item || rec.description;
+                        rec.explanation_in_chinese  = ccPick.explanation_cn || rec.explanation_in_chinese;
+                        rec.pricing_unit            = ccPick.price_unit || rec.pricing_unit;
+                        rec.uom                     = rec.uom || ccPick.uom || '';
+                    }
+                }
+                return rec;
+            });
+        }
+
+        // 组装最终 payload
+        // main 字段平铺到根层,与 fee_detail / invoice_method / split_field 同级
+        function assembleBillPayload() {
+            const main = collectMainTableFields();
+            const subtable = collectSubtableRows();
+            const invoiceMethod = document.getElementById('invoiceMethodSelect')?.value || 'merge';
+            const splitField = document.getElementById('splitFieldSelect')?.value || '';
+            return Object.assign({}, main, {
+                fee_detail: subtable,
+                invoice_method: invoiceMethod,
+                split_field: invoiceMethod === 'split' ? splitField : ''
+            });
+        }
+
+        // 校验必要字段
+        function validateBillPayload(payload) {
+            const errs = [];
+            if (!payload.payee)                 errs.push('请选择 Payee(收款方)');
+            if (!payload.bankid && !payload.bank_name) errs.push('请选择 Bank ID(发账单方银行)');
+            if (!payload.biz_dept)              errs.push('请选择业务部门');
+            if (!payload.server)                errs.push('请选择服务地');
+            if (!payload.invoice_ex_rate_s_y)   errs.push('请填写开票汇率索引');
+            if (!payload.cus_ref_code)          errs.push('请填写 Cus Ref. Code');
+            if (!payload.fee_detail || payload.fee_detail.length === 0) {
+                errs.push('子表明细为空,请上传附件并映射费用项目列');
+            } else {
+                // 子表每行 charge_model 必填(由 Charge Code 弹框的 JKS_QUOTE_CODE 提供)
+                const missingRows = [];
+                payload.fee_detail.forEach((row, idx) => {
+                    if (!row.charge_model) {
+                        const feeName = row.charge_item || `第 ${idx + 1} 行`;
+                        missingRows.push(feeName);
+                    }
+                });
+                if (missingRows.length > 0) {
+                    errs.push('以下费用明细未选择 Ragic Charge Code,Charge Model 不能为空:\n    • ' + missingRows.join('\n    • '));
+                }
+            }
+            return errs;
+        }
+
+        // 调用 rsave 接口
+        // tabcode / tablecode 通过 URL query 传递,和主表字段接口(fields)保持一致
+        async function submitBillToServer(payload) {
+            const url = 'https://wls.zh1gl.com/api/crdnprinter/rsave?tabcode=accounting&tablecode=6';
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const json = await res.json();
+            // 严格:必须 code === 1 才算成功
+            if (json.code !== 1) {
+                throw new Error((json.msg || json.message || '接口返回 code=' + json.code) + '');
+            }
+            return json;
+        }
+
+
+        async function triggerAIPhase2() {
+            // 1) 组装 + 校验
+            let payload;
+            try {
+                payload = assembleBillPayload();
+            } catch (err) {
+                alert('数据组装失败:' + err.message);
+                return;
+            }
+            const errs = validateBillPayload(payload);
+            if (errs.length > 0) {
+                alert('无法提交,请先完成以下项:\n\n- ' + errs.join('\n- '));
+                return;
+            }
+            console.log('📤 提交 rsave 的 payload:', payload);
+
+            // 2) 启动动画(与真实请求并行)
+            const overlay = document.getElementById('aiOverlay');
+            const logList = document.getElementById('aiLogList');
+            document.getElementById('aiStatusText').innerText = 'AI 正在进行核心打包与 API 写入...';
+            logList.innerHTML = '';
+            logList.style.transform = 'translateY(0)';
+            overlay.classList.add('active');
+            const logLines = [
+                '编译开票组装策略引擎...',
+                '校验拆分与独立计费约束规则...',
+                '挂载 Charge Code 外键关联关系...',
+                '请求 Ragic API 核心网关进行批量写库 (Transaction)...',
+                '哈希校验通过,业务闭环验证完成。'
+            ];
+            const logTimers = [];
+            let delay = 300;
+            logLines.forEach(line => {
+                const t = setTimeout(() => {
+                    const li = document.createElement('li');
+                    li.className = 'log-enter flex items-start gap-2 text-[11px] sm:text-xs';
+                    li.innerHTML = `<span class="text-tech-primary mt-0.5">❯</span> <span class="text-gray-600">${line}</span>`;
+                    logList.appendChild(li);
+                    if (logList.children.length > 3) {
+                        logList.style.transform = `translateY(-${(logList.children.length - 3) * 24}px)`;
+                    }
+                }, delay);
+                logTimers.push(t);
+                delay += 400 + Math.random() * 500;
+            });
+
+            // 3) 调用 rsave 接口:接口一成功立刻跳转,不再等动画播完
+            try {
+                const json = await submitBillToServer(payload);
+                console.log('✅ rsave 响应:', json);
+                window.lastRsaveResponse = json;
+                // 清掉还没执行的日志定时器,避免跳转后还在后台冒字
+                logTimers.forEach(t => clearTimeout(t));
+                overlay.classList.remove('active');
+                changeStep(3);
+            } catch (err) {
+                console.error('❌ rsave 失败:', err);
+                logTimers.forEach(t => clearTimeout(t));
+                overlay.classList.remove('active');
+                alert('保存失败:' + err.message + '\n\n请检查网络或联系管理员。');
+            }
+        }
+
+        function runFakeAILogging(mainText, logLines, callback) {
+            const overlay = document.getElementById('aiOverlay'), logList = document.getElementById('aiLogList');
+            document.getElementById('aiStatusText').innerText = mainText;
+            logList.innerHTML = ''; logList.style.transform = 'translateY(0)'; overlay.classList.add('active');
+            let delay = 300;
+            logLines.forEach((line) => {
+                setTimeout(() => {
+                    const li = document.createElement('li'); li.className = "log-enter flex items-start gap-2 text-[11px] sm:text-xs";
+                    li.innerHTML = `<span class="text-tech-primary mt-0.5">❯</span> <span class="text-gray-600">${line}</span>`;
+                    logList.appendChild(li);
+                    if (logList.children.length > 3) logList.style.transform = `translateY(-${(logList.children.length - 3) * 24}px)`;
+                }, delay);
+                delay += 400 + Math.random() * 500;
+            });
+            setTimeout(() => { overlay.classList.remove('active'); if(callback) callback(); }, delay + 800);
+        }
+
+        function changeStep(step) {
+            document.querySelectorAll('.step-container > div[id^="step-"]').forEach(el => el.className = 'hidden-step');
+            document.getElementById(`step-${step}`).className = 'active-step relative z-10';
+            [1, 2, 3].forEach(i => { document.getElementById(`nav-${i}`).className = i === step ? "text-tech-primary bg-blue-50 px-3 py-1 rounded-full font-bold" : (i < step ? "text-gray-400 line-through px-3 py-1" : "text-gray-400 px-3 py-1"); });
+        }
+    </script>
+</body>
+</html>
