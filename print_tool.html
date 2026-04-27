@@ -1,0 +1,2239 @@
+{__NOLAYOUT__}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CR/DN Printer</title>
+<link rel="shortcut icon" href="/assets/img/favicon.ico" />
+<style>
+:root {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-hover: #f8f9fc;
+  --primary: #2d5bff;
+  --primary-light: #eef2ff;
+  --primary-dark: #1a3fd4;
+  --accent: #ff6b35;
+  --text: #1a1d26;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border: #e5e7eb;
+  --border-light: #f0f1f4;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app-header {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: white;
+  padding: 0 32px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.15);
+}
+
+.app-header h1 {
+  font-size: 18px; font-weight: 600; letter-spacing: -0.3px;
+  display: flex; align-items: center; gap: 10px;
+}
+
+.app-header h1 .icon {
+  width: 32px; height: 32px;
+  background: var(--primary); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+}
+
+.header-meta {
+  display: flex; align-items: center; gap: 16px;
+  font-size: 13px; color: rgba(255,255,255,0.6);
+}
+
+.header-meta .badge {
+  background: rgba(255,255,255,0.1);
+  padding: 4px 12px; border-radius: 20px; font-size: 12px;
+}
+
+.steps-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 32px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.step-item {
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer; transition: all 0.3s;
+  padding: 8px 20px; border-radius: 8px;
+}
+
+.step-item:hover { background: var(--surface-hover); }
+
+.step-num {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600;
+  background: var(--border); color: var(--text-muted);
+  transition: all 0.3s;
+}
+
+.step-item.active .step-num {
+  background: var(--primary); color: white;
+  box-shadow: 0 2px 8px rgba(45,91,255,0.3);
+}
+
+.step-item.done .step-num { background: var(--success); color: white; }
+
+.step-label {
+  font-size: 13px; font-weight: 500;
+  color: var(--text-muted); transition: all 0.3s;
+}
+
+.step-item.active .step-label { color: var(--text); }
+.step-item.done .step-label { color: var(--success); }
+
+.step-connector {
+  width: 40px; height: 2px; background: var(--border);
+  margin: 0 4px; border-radius: 1px; transition: background 0.3s;
+}
+
+.step-connector.done { background: var(--success); }
+
+.main-content { max-width: 1200px; margin: 0 auto; padding: 28px 32px; }
+
+.panel {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm); border: 1px solid var(--border-light); overflow: hidden;
+}
+
+.panel-header {
+  padding: 20px 24px; border-bottom: 1px solid var(--border-light);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.panel-header h2 {
+  font-size: 16px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.panel-body { padding: 24px; }
+
+.invoice-info-grid { display: flex; flex-direction: column; gap: 20px; }
+
+.info-section-block {}
+
+.info-section-title {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 0 8px 2px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--text-secondary);
+  border-bottom: 2px solid var(--primary-light);
+  margin-bottom: 2px;
+}
+
+.info-section-title .stitle-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--primary); flex-shrink: 0;
+}
+
+.info-section-rows {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.info-item {
+  display: flex; flex-direction: column;
+  padding: 11px 16px; gap: 3px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.info-item:hover { background: var(--primary-light); }
+.info-item:nth-child(even) { border-right: none; }
+.info-item:nth-last-child(-n+2) { border-bottom: none; }
+
+.info-item .label {
+  font-size: 10.5px; font-weight: 600;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+}
+.info-item .value {
+  font-size: 13.5px; font-weight: 500; color: var(--text);
+  word-break: break-word; line-height: 1.45;
+}
+.info-item .value.empty { color: var(--text-muted); font-style: italic; }
+.info-item .logo-preview { max-height: 40px; max-width: 130px; object-fit: contain; margin-top: 2px; }
+
+.template-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px;
+}
+
+.template-card {
+  border: 2px solid var(--border); border-radius: var(--radius);
+  padding: 20px; cursor: pointer; transition: all 0.25s; position: relative;
+}
+
+.template-card:hover {
+  border-color: var(--primary); box-shadow: var(--shadow-md); transform: translateY(-2px);
+}
+
+.template-card.selected { border-color: var(--primary); background: var(--primary-light); }
+
+.template-card.selected::after {
+  content: '✓'; position: absolute; top: 12px; right: 12px;
+  width: 24px; height: 24px; background: var(--primary); color: white;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+}
+
+.template-card .tpl-icon {
+  width: 48px; height: 48px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; margin-bottom: 12px;
+}
+
+.template-card .tpl-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.template-card .tpl-meta { font-size: 11px; color: var(--text-muted); }
+
+.tpl-del-btn {
+  position: absolute; bottom: 10px; right: 10px;
+  background: none; border: none; cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 4px 5px;
+  border-radius: 6px; color: var(--text-muted);
+  opacity: 0; transition: opacity 0.15s, background 0.15s;
+  z-index: 2;
+}
+.template-card:hover .tpl-del-btn { opacity: 1; }
+.tpl-del-btn:hover { background: #fee2e2; color: #dc2626; }
+
+.field-config-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+.field-group {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 16px;
+}
+
+.field-group-title {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px;
+  color: var(--text-secondary); background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.field-group-title .fg-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--primary); flex-shrink: 0;
+}
+
+.field-row {
+  display: flex; align-items: center; padding: 7px 14px;
+  gap: 10px; border-bottom: 1px solid var(--border-light);
+  transition: background 0.15s;
+}
+
+.field-row:last-child { border-bottom: none; }
+.field-row:hover { background: var(--primary-light); }
+
+.field-row.unchecked { opacity: 0.42; }
+.field-row.unchecked .field-original { text-decoration: line-through; }
+.field-row.unchecked .arrow,
+.field-row.unchecked input[type="text"] { opacity: 0; pointer-events: none; }
+
+.field-row input[type="checkbox"] {
+  width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; flex-shrink: 0;
+}
+
+.field-row .field-original {
+  font-size: 13px; font-weight: 500; color: var(--text);
+  min-width: 130px; flex-shrink: 0;
+}
+
+.field-row .arrow { color: var(--text-muted); font-size: 12px; flex-shrink: 0; }
+
+.field-row input[type="text"] {
+  flex: 1; border: none; border-bottom: 1px solid var(--border);
+  padding: 3px 6px; font-size: 13px; font-family: inherit; outline: none;
+  background: transparent; color: var(--text); transition: border-color 0.2s, background 0.15s;
+}
+
+.field-row input[type="text"]:focus {
+  border-color: var(--primary); background: var(--primary-light);
+  border-radius: var(--radius-xs); box-shadow: none;
+}
+
+/* Scale control */
+.scale-control-bar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 20px; background: var(--bg);
+  border-radius: var(--radius-sm); margin-bottom: 20px;
+  border: 1px solid var(--border-light);
+}
+
+.scale-control-bar label { font-size: 13px; font-weight: 500; white-space: nowrap; }
+
+.scale-control-bar input[type="range"] {
+  width: 160px; accent-color: var(--primary); height: 6px;
+}
+
+.scale-control-bar .scale-val {
+  font-size: 14px; font-weight: 700; color: var(--primary);
+  min-width: 48px; text-align: center;
+  background: var(--primary-light); padding: 4px 10px;
+  border-radius: var(--radius-xs);
+}
+
+.scale-presets { display: flex; gap: 6px; }
+.scale-presets button {
+  padding: 4px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-xs); background: white;
+  font-size: 11px; font-family: inherit; cursor: pointer;
+  transition: all 0.15s;
+}
+.scale-presets button:hover { border-color: var(--primary); color: var(--primary); }
+.scale-presets button.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+/* Change detection banner */
+.change-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; border-radius: var(--radius-sm);
+  margin-bottom: 16px; font-size: 13px;
+  animation: fadeInUp 0.3s ease;
+}
+
+.change-banner.has-change {
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+}
+
+.change-banner.no-change {
+  background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46;
+}
+
+.change-banner .banner-icon { font-size: 18px; flex-shrink: 0; }
+.change-banner .banner-text { flex: 1; }
+.change-banner .btn { flex-shrink: 0; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 20px; border: none; border-radius: var(--radius-xs);
+  font-size: 13px; font-weight: 500; font-family: inherit;
+  cursor: pointer; transition: all 0.2s;
+}
+
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-dark); box-shadow: 0 2px 8px rgba(45,91,255,0.3); }
+
+.btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border-light); }
+
+.btn-success { background: var(--success); color: white; }
+.btn-success:hover { background: #059669; }
+
+.btn-accent { background: var(--accent); color: white; }
+.btn-accent:hover { background: #e55a28; }
+
+.btn-warning { background: var(--warning); color: white; }
+.btn-warning:hover { background: #d97706; }
+
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-lg { padding: 12px 28px; font-size: 14px; }
+
+.actions-bar {
+  display: flex; justify-content: space-between; align-items: center; margin-top: 24px;
+}
+
+.preview-controls {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+}
+
+.export-type-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border: 2px solid var(--border);
+  border-radius: var(--radius-sm); background: white;
+  cursor: pointer; transition: all 0.2s;
+  font-family: inherit; font-size: 13px; font-weight: 500;
+}
+
+.export-type-btn:hover { border-color: var(--primary); }
+.export-type-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+.export-type-btn .icon { font-size: 20px; }
+
+.invoice-preview-wrap {
+  background: #e8eaee; border-radius: var(--radius);
+  padding: 32px; display: flex; justify-content: center;
+  overflow: hidden;
+}
+
+.invoice-preview-scaler {
+  transform-origin: top center;
+  transition: transform 0.25s ease;
+}
+
+.invoice-preview {
+  background: white; width: 794px;
+  min-height: 1123px; padding: 28px 32px;
+  box-shadow: var(--shadow-lg); position: relative; overflow: visible;
+  font-size: 13px;
+}
+.inv-table-wrap { overflow-x: auto; }
+
+.invoice-preview .inv-header {
+  display: flex; justify-content: space-between;
+  align-items: flex-start; margin-bottom: 1.8em;
+  padding-bottom: 1.2em; border-bottom: 3px solid #1a1d26;
+}
+
+.inv-logo { display: flex; align-items: center; gap: 12px; }
+
+.inv-logo .logo-box {
+  width: 3.6em; height: 3.6em;
+  background: linear-gradient(135deg, #2d5bff, #1a3fd4);
+  border-radius: 0.5em; display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 1.2em; flex-shrink: 0;
+}
+
+.inv-logo-img {
+  height: 3.6em; width: auto; max-width: 9em;
+  object-fit: contain; flex-shrink: 0;
+}
+
+.inv-org-name { font-size: 0.88em; color: var(--text-secondary); margin-top: 3px; }
+
+/* 右侧：发票标题 + 徽章 */
+.inv-header-right {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0.45em;
+  text-align: right;
+}
+.inv-sheet-title {
+  font-size: 1.3em; font-weight: 700; color: var(--text); line-height: 1.2;
+}
+
+.inv-type-badge {
+  padding: 0.4em 1.4em; border-radius: 4px;
+  font-size: 1.1em; font-weight: 700; letter-spacing: 1px;
+}
+
+.inv-type-badge.cn { background: #fef3c7; color: #92400e; }
+.inv-type-badge.dn { background: #dbeafe; color: #1e40af; }
+
+.inv-meta-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 0.5em 2em; margin-bottom: 1.4em;
+  font-size: 1em;
+}
+
+.inv-meta-item { display: flex; gap: 0.5em; }
+.inv-meta-item .k { font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
+.inv-meta-item .v { font-weight: 500; }
+
+.inv-section-title {
+  font-weight: 600; font-size: 0.92em; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-secondary);
+  margin: 1.2em 0 0.6em; padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.inv-table { width: 100%; border-collapse: collapse; margin: 0.8em 0; }
+
+.inv-table th {
+  background: #f1f5f9; padding: 0.6em 0.8em; text-align: left;
+  font-size: 0.85em; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.3px; color: var(--text-secondary);
+  border-bottom: 2px solid var(--border);
+}
+
+.inv-table td { padding: 0.6em 0.8em; border-bottom: 1px solid var(--border-light); }
+
+.inv-table .total-row td {
+  font-weight: 700; border-top: 2px solid var(--text); border-bottom: none;
+}
+
+.inv-total-bar {
+  display: flex; justify-content: flex-end; align-items: center;
+  gap: 1.5em; padding: 0.55em 0.8em;
+  border-top: 2px solid var(--text); border-bottom: 1px solid var(--border);
+  margin-top: 0;
+}
+.inv-total-label {
+  font-size: 0.9em; font-weight: 600; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.inv-total-value {
+  font-size: 1.1em; font-weight: 700; color: var(--text);
+}
+
+.inv-bank-sig-row {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-top: 1.8em; padding-top: 1em; border-top: 1px solid var(--border);
+  gap: 2em;
+}
+.inv-bank {
+  flex: 1; padding: 0;
+}
+
+.inv-bank-title {
+  font-weight: 600; font-size: 0.92em; margin-bottom: 0.4em;
+  text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary);
+}
+
+.inv-bank-row { display: flex; gap: 0.5em; margin-bottom: 0.15em; }
+.inv-bank-row .k { color: var(--text-secondary); min-width: 7em; }
+
+.inv-footer { margin-top: 2.5em; }
+
+.inv-footer .sig-area { text-align: right; flex-shrink: 0; }
+
+.inv-footer .sig-line {
+  width: 14em; border-bottom: 1px solid var(--text);
+  margin-top: 3em; margin-left: auto;
+}
+
+.inv-footer .sig-label { font-size: 0.85em; color: var(--text-secondary); margin-top: 0.3em; }
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.55);
+  align-items: center; justify-content: center;
+  z-index: 9999;
+}
+
+.modal-overlay.show { display: flex; }
+
+.modal {
+  background: white; border-radius: var(--radius);
+  box-shadow: var(--shadow-lg); width: 520px; max-width: 90vw;
+  max-height: 90vh; overflow-y: auto;
+  padding: 28px;
+}
+
+.modal-overlay.show .modal {
+  animation: modalIn 0.2s ease;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.modal h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.modal .modal-desc { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5; }
+.modal .form-group { margin-bottom: 16px; }
+
+.modal .form-group label {
+  display: block; font-size: 13px; font-weight: 500;
+  margin-bottom: 6px; color: var(--text-secondary);
+}
+
+.modal .form-group input {
+  width: 100%; border: 1px solid var(--border); border-radius: var(--radius-xs);
+  padding: 10px 12px; font-size: 14px; font-family: inherit; outline: none;
+}
+
+.modal .form-group input:focus {
+  border-color: var(--primary); box-shadow: 0 0 0 3px rgba(45,91,255,0.1);
+}
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+
+.change-detail-list {
+  background: var(--bg); border-radius: var(--radius-xs);
+  padding: 12px 16px; margin-bottom: 16px; max-height: 200px; overflow-y: auto;
+}
+
+.change-detail-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; font-size: 12px; color: var(--text-secondary);
+}
+
+.change-detail-item .cd-icon { font-size: 14px; }
+.change-detail-item .cd-label { font-weight: 500; color: var(--text); }
+
+.toast {
+  position: fixed; bottom: 32px; right: 32px;
+  background: #1a1d26; color: white;
+  padding: 14px 24px; border-radius: var(--radius-sm);
+  font-size: 14px; box-shadow: var(--shadow-lg); z-index: 10001;
+  transform: translateY(20px); opacity: 0; transition: all 0.3s;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.toast.show { transform: translateY(0); opacity: 1; }
+
+.step-content { display: none; }
+.step-content.active { display: block; }
+
+@media (max-width: 768px) {
+  .invoice-info-grid { grid-template-columns: 1fr; }
+  .field-config-layout { grid-template-columns: 1fr; }
+  .invoice-preview { padding: 20px; }
+  .inv-meta-grid { grid-template-columns: 1fr; }
+  .main-content { padding: 16px; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.step-content.active { animation: fadeInUp 0.35s ease; }
+
+/* 打印专用节点：屏幕下隐藏 */
+#printRoot { display: none; }
+
+@media print {
+  /* margin:0 使 Chrome 打印对话框默认不勾选"页眉和页脚" */
+  @page { margin: 0; size: A4 portrait; }
+
+  /* 隐藏 body 所有直接子元素，只留打印根节点 */
+  body > *:not(#printRoot) { display: none !important; }
+
+  #printRoot {
+    display: block !important;
+    margin: 0; padding: 0;
+  }
+
+  #printRoot .invoice-preview-scaler {
+    transform: none !important;
+    width: 100% !important;
+    margin: 0; padding: 0;
+  }
+
+  #printRoot .invoice-preview {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+    /* 用 padding 补回原来 @page margin 留出的页边距 */
+    margin: 0; padding: 10mm 12mm;
+  }
+
+  /* 强制恢复双列布局（防止 max-width:768px 在打印时触发单列） */
+  .inv-meta-grid { grid-template-columns: 1fr 1fr !important; }
+  .inv-bank-sig-row { display: flex !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1><span class="icon">📄</span> <span id="hdrTitle">账单打印工具</span></h1>
+  <div class="header-meta">
+    <span class="badge" id="hdrScope">—</span>
+    <span id="hdrRagic">_ragicId: —</span>
+  </div>
+</header>
+
+<div class="steps-bar">
+  <div class="step-item active" data-step="1" onclick="goToStep(1)">
+    <div class="step-num">1</div><div class="step-label">账单信息</div>
+  </div>
+  <div class="step-connector" id="conn-1-2"></div>
+  <div class="step-item" data-step="2" onclick="goToStep(2)">
+    <div class="step-num">2</div><div class="step-label">选择模板</div>
+  </div>
+  <div class="step-connector" id="conn-2-3"></div>
+  <div class="step-item" data-step="3" onclick="goToStep(3)">
+    <div class="step-num">3</div><div class="step-label">字段配置</div>
+  </div>
+  <div class="step-connector" id="conn-3-4"></div>
+  <div class="step-item" data-step="4" onclick="goToStep(4)">
+    <div class="step-num">4</div><div class="step-label">预览导出</div>
+  </div>
+</div>
+
+<div class="main-content">
+
+  <!-- Step 1 -->
+  <div class="step-content active" id="step-1">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>📋 当前记录</h2>
+        <span id="step1Hint" style="font-size:12px;color:var(--text-secondary);background:var(--bg);padding:3px 10px;border-radius:20px;border:1px solid var(--border)">加载中…</span>
+      </div>
+      <div class="panel-body">
+        <div class="invoice-info-grid" id="invoiceInfoGrid"></div>
+      </div>
+    </div>
+    <div class="actions-bar">
+      <div></div>
+      <button class="btn btn-primary btn-lg" onclick="goToStep(2)">下一步：选择模板 →</button>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step-content" id="step-2">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>🎨 选择打印模板</h2>
+        <span style="font-size:12px;color:var(--text-muted)">选择后可在下一步编辑字段</span>
+      </div>
+      <div class="panel-body">
+        <div class="template-grid" id="templateGrid"></div>
+      </div>
+    </div>
+    <div class="actions-bar">
+      <button class="btn btn-secondary btn-lg" onclick="goToStep(1)">← 上一步</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-secondary btn-lg" id="btnSkipTpl" onclick="skipTemplate()">不选择模板，下一步 →</button>
+        <button class="btn btn-primary btn-lg" id="btnNextTpl" onclick="tryGoToStep3()">下一步：字段配置 →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step-content" id="step-3">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>⚙️ 字段配置</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-secondary" onclick="selectAllFields()">全选</button>
+          <button class="btn btn-sm btn-secondary" onclick="deselectAllFields()">全不选</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="field-config-layout">
+          <div>
+            <div class="field-group">
+              <div class="field-group-title"><span class="fg-dot"></span>📋&ensp;主表 · 基本信息</div>
+              <div id="basicFieldsContainer"></div>
+            </div>
+            <div class="field-group">
+              <div class="field-group-title"><span class="fg-dot"></span>🚢&ensp;主表 · 运输 / 船务</div>
+              <div id="shippingFieldsContainer"></div>
+            </div>
+          </div>
+          <div>
+            <div class="field-group">
+              <div class="field-group-title"><span class="fg-dot"></span>💰&ensp;主表 · 费用相关</div>
+              <div id="chargeFieldsContainer"></div>
+            </div>
+            <div class="field-group">
+              <div class="field-group-title"><span class="fg-dot"></span>🏦&ensp;主表 · 银行 / 账户</div>
+              <div id="bankFieldsContainer"></div>
+            </div>
+            <div id="subTablesFieldsRoot"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actions-bar">
+      <button class="btn btn-secondary btn-lg" onclick="goToStep(2)">← 上一步</button>
+      <button class="btn btn-primary btn-lg" onclick="goToStep(4)">下一步：预览导出 →</button>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div class="step-content" id="step-4">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>🖨️ 预览与导出</h2>
+        <button class="btn btn-warning btn-sm" onclick="showSaveModal()">💾 保存模板</button>
+      </div>
+      <div class="panel-body">
+        <!-- Change detection banner -->
+        <div id="changeBanner"></div>
+
+        <!-- Scale + Export row -->
+        <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;align-items:stretch;">
+          <!-- Scale control -->
+          <div class="scale-control-bar" style="flex:1;margin-bottom:0;">
+            <label>🔍 等比缩放：</label>
+            <div class="scale-presets">
+              <button onclick="setScale(80)">80%</button>
+              <button onclick="setScale(90)">90%</button>
+              <button class="active" onclick="setScale(100)">100%</button>
+              <button onclick="setScale(110)">110%</button>
+              <button onclick="setScale(120)">120%</button>
+            </div>
+            <input type="range" min="60" max="150" value="100" id="scaleSlider"
+                   oninput="setScale(parseInt(this.value))">
+            <span class="scale-val" id="scaleVal">100%</span>
+          </div>
+        </div>
+
+        <!-- Export controls -->
+        <div class="preview-controls">
+          <span style="font-size:13px;font-weight:500;margin-right:8px;">导出格式：</span>
+          <button class="export-type-btn active" onclick="setExportType('pdf', this)">
+            <span class="icon">📕</span> PDF 文件
+          </button>
+          <button class="export-type-btn" onclick="setExportType('excel', this)">
+            <span class="icon">📊</span> Excel 文件
+          </button>
+          <div style="flex:1"></div>
+          <button id="btnExport" class="btn btn-accent btn-lg" onclick="doExport()">🚀 导出文件</button>
+          <button class="btn btn-secondary btn-lg" onclick="doPrint()">🖨️ 直接打印</button>
+        </div>
+
+        <!-- Preview -->
+        <div class="invoice-print-root">
+          <div class="invoice-preview-wrap">
+            <div class="invoice-preview-scaler" id="invoiceScaler">
+              <div class="invoice-preview" id="invoicePreview"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actions-bar">
+      <button class="btn btn-secondary btn-lg" onclick="goToStep(3)">← 上一步</button>
+      <div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Save Template Modal -->
+<div class="modal-overlay" id="saveTemplateModal">
+  <div class="modal">
+    <h3 id="saveModalTitle">💾 保存模板</h3>
+    <p class="modal-desc">检测到您修改了字段设置，请选择保存方式。</p>
+    <div id="changeDetailContainer"></div>
+    <!-- 选择已有模板更新（未预先选中模板时显示） -->
+    <div id="saveModePick" style="display:none;">
+      <div class="form-group">
+        <label>更新已有模板</label>
+        <select id="savePickTplSelect" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid #d1d5db;font-size:14px;color:#374151;background:#fff;"></select>
+      </div>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0;">
+      <div style="font-size:12px;color:var(--text-muted,#6b7280);margin-bottom:8px;">或：另存为新模板</div>
+    </div>
+    <!-- 更新模式：可编辑模板名 + 只读 code -->
+    <div id="saveModeCurrent" style="display:none;">
+      <div style="margin-bottom:10px;font-size:12px;color:var(--text-muted,#6b7280);">
+        模板编码：<span id="saveModeCurCode" style="font-family:monospace;color:var(--text-secondary,#374151);"></span>
+      </div>
+      <div class="form-group">
+        <label>模板名称 <span style="color:var(--danger)">*</span></label>
+        <input type="text" id="saveModeCurName" placeholder="模板名称">
+      </div>
+    </div>
+    <!-- 另存为新模板表单 -->
+    <div id="saveModeNewForm">
+      <div class="form-group">
+        <label>新模板名称 <span style="color:var(--danger)">*</span></label>
+        <input type="text" id="saveTplTitle" placeholder="例：标准海运账单模板 v2">
+      </div>
+      <div class="form-group">
+        <label>备注（可留空）</label>
+        <input type="text" id="saveTplRemark" placeholder="可选说明">
+      </div>
+    </div>
+    <div class="modal-actions" id="saveModalActions">
+      <button class="btn btn-warning" id="btnPickTpl" style="display:none;" onclick="updatePickedTemplate()">更新选中模板</button>
+      <button class="btn btn-warning" id="btnUpdateTpl" style="display:none;" onclick="updateExistingTemplate()">覆盖更新此模板</button>
+      <button class="btn btn-success" id="btnSaveNew" onclick="saveAsNewTemplate()">另存为新模板</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 后端注入的 base64（避免模板表达式影响 JS 解析） -->
+<textarea id="printBootB64" style="position:fixed;left:-99999px;top:-99999px;width:1px;height:1px;opacity:0;">{$print_boot_b64}</textarea>
+
+<script>
+/* 后端注入：Ragic 行数据 + 字段元数据 + 模板列表（crdnprinter_tpl） */
+function __htmlEscape(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function showBootError(msg) {
+  var el = document.getElementById('step1Hint');
+  if (el) el.textContent = '初始化失败：' + msg;
+  var grid = document.getElementById('invoiceInfoGrid');
+  if (grid) {
+    grid.innerHTML = '<div class="info-item"><span class="label">错误</span><span class="value">' + __htmlEscape(msg) + '</span></div>';
+  }
+}
+
+window.addEventListener('error', function (e) {
+  try { showBootError(e && e.message ? e.message : '未知 JS 错误'); } catch (_) {}
+});
+
+var PRINT_BOOT = null;
+try {
+  var holder = document.getElementById('printBootB64');
+  var b64 = holder ? (holder.value || holder.textContent || '').trim() : '';
+  if (!b64) throw new Error('print_boot_b64 为空（模板未输出变量）');
+  PRINT_BOOT = JSON.parse(atob(b64));
+} catch (e) {
+  // 不再做“直接注入 JSON 对象”的兜底，避免模板转义/特殊字符导致整个脚本解析失败
+  showBootError((e && e.message) ? e.message : 'PRINT_BOOT base64 解析失败');
+}
+if (!PRINT_BOOT || !PRINT_BOOT.row) {
+  showBootError('缺少打印数据（PRINT_BOOT.row 为空）');
+  throw new Error('PRINT_BOOT missing');
+}
+
+// 可视化调试：让页面顶部显示解析状态/字段数量
+try {
+  var hdr = document.getElementById('hdrScope');
+  if (hdr) {
+    var kcnt = PRINT_BOOT && PRINT_BOOT.row ? Object.keys(PRINT_BOOT.row).length : 0;
+    hdr.textContent = (PRINT_BOOT.scopeKey || '') + ' · row keys=' + kcnt;
+  }
+  var hr = document.getElementById('hdrRagic');
+  if (hr) hr.textContent = '_ragicId: ' + (PRINT_BOOT._ragicId != null ? PRINT_BOOT._ragicId : '—');
+} catch (_) {}
+
+const row = PRINT_BOOT.row;
+const mainFieldsMeta = PRINT_BOOT.mainFields || [];
+const subTablesMeta = PRINT_BOOT.subTables || [];
+let templates = (PRINT_BOOT.templates || []).map(t => ({
+  id: 'db-' + t.id,
+  dbId: t.id,
+  name: t.name,
+  code: t.code || '',
+  creator: String(t.optor != null ? t.optor : ''),
+  createdAt: t.createtime ? fmtDate(t.createtime) : '',
+  type: 'saved',
+  icon: '📋',
+  iconBg: '#e0e7ff',
+  scale: (t.config && t.config.scale) ? parseInt(t.config.scale, 10) : 100,
+  config: t.config
+}));
+
+function fmtDate(ts) {
+  const d = new Date(ts * 1000);
+  if (isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+const allFields = { basic: [], shipping: [], charge: [], bank: [] };
+const subFieldRegistry = {};
+
+function rebuildAllFieldsIndex() {
+  allFields.basic = []; allFields.shipping = []; allFields.charge = []; allFields.bank = [];
+  Object.keys(subFieldRegistry).forEach(k => delete subFieldRegistry[k]);
+  for (const f of mainFieldsMeta) {
+    const g = f.group || 'basic';
+    const def = { key: f.key, label: f.label, default: f.label };
+    if (allFields[g]) allFields[g].push(def);
+    else allFields.basic.push(def);
+  }
+  subTablesMeta.forEach((st, idx) => {
+    const reg = [];
+    for (const c of st.columns) {
+      reg.push({ subIdx: idx, subKey: st.key, colKey: c.key, label: c.label, default: c.label });
+    }
+    subFieldRegistry[idx] = { subKey: st.key, columns: reg };
+  });
+}
+
+// ============ STATE ============
+let currentStep = 1;
+let selectedTemplate = null;
+let exportType = 'pdf';
+let scalePercent = 100;
+let fieldConfig = {};
+let subColConfig = {};
+let templateSnapshot = null;
+let templateSnapshotSub = null;
+let templateSnapshotScale = 100;
+
+// ============ INIT ============
+function init() {
+  document.getElementById('hdrTitle').textContent = (PRINT_BOOT.sheetTitle || '账单') + ' · 打印';
+  document.getElementById('hdrScope').textContent = PRINT_BOOT.scopeKey || '';
+  document.getElementById('hdrRagic').textContent = '_ragicId: ' + (PRINT_BOOT._ragicId != null ? PRINT_BOOT._ragicId : '—');
+  rebuildAllFieldsIndex();
+  initFieldConfig();
+  takeSnapshot();
+  renderSubTableFieldGroups();
+  renderStep1();
+  renderTemplates();
+  renderFieldConfig();
+}
+
+function initFieldConfig() {
+  fieldConfig = {};
+  subColConfig = {};
+  for (const g of ['basic', 'shipping', 'charge', 'bank']) {
+    for (const f of allFields[g]) {
+      fieldConfig[f.key] = { checked: true, customName: f.default };
+    }
+  }
+  subTablesMeta.forEach((st, idx) => {
+    subColConfig[idx] = {};
+    const cols = subFieldRegistry[idx] ? subFieldRegistry[idx].columns : [];
+    for (const c of cols) {
+      subColConfig[idx][c.colKey] = { checked: true, customName: c.default };
+    }
+  });
+}
+
+function findFieldDef(key) {
+  for (const g of Object.keys(allFields)) {
+    const f = allFields[g].find(x => x.key === key);
+    if (f) return f;
+  }
+  return null;
+}
+
+function renderSubTableFieldGroups() {
+  const root = document.getElementById('subTablesFieldsRoot');
+  if (!root) return;
+  let html = '';
+  subTablesMeta.forEach((st, idx) => {
+    html += '<div class="field-group" data-sub-idx="' + idx + '"><div class="field-group-title"><span class="fg-dot"></span>📊&ensp;子表 · ' + esc(st.title) + '<span style="font-weight:400;margin-left:6px;color:var(--text-muted)">(' + (st.rowCount || 0) + ' 行)</span></div><div id="subFields_' + idx + '"></div></div>';
+  });
+  root.innerHTML = html;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+function escAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
+}
+
+function formatCell(v) {
+  if (v == null) return '';
+  if (Array.isArray(v)) return v.join(', ');
+  if (typeof v === 'object') return JSON.stringify(v);
+  const s = String(v).trim();
+  if (/^-?\d{1,}(\.\d+)$/.test(s)) {
+    return parseFloat(s).toFixed(2);
+  }
+  return s;
+}
+
+// ============ SNAPSHOT & CHANGE DETECTION ============
+function takeSnapshot() {
+  templateSnapshot = JSON.parse(JSON.stringify(fieldConfig));
+  templateSnapshotSub = JSON.parse(JSON.stringify(subColConfig));
+  templateSnapshotScale = scalePercent;
+}
+
+function findSubColLabel(subIdx, colKey) {
+  const reg = subFieldRegistry[subIdx];
+  if (!reg) return colKey;
+  const c = reg.columns.find(x => x.colKey === colKey);
+  return c ? (reg.subKey + ' · ' + c.label) : colKey;
+}
+
+function getChanges() {
+  const changes = [];
+  if (!templateSnapshot) return changes;
+  for (const key of Object.keys(fieldConfig)) {
+    const curr = fieldConfig[key];
+    const snap = templateSnapshot[key];
+    if (!snap) { if (curr.checked) changes.push({ type:'added', key, label: findFieldDef(key)?.label||key }); continue; }
+    if (curr.checked !== snap.checked) {
+      changes.push({ type: curr.checked ? 'enabled' : 'disabled', key, label: findFieldDef(key)?.label||key });
+    } else if (curr.checked && curr.customName !== snap.customName) {
+      changes.push({ type:'renamed', key, label: findFieldDef(key)?.label||key, from: snap.customName, to: curr.customName });
+    }
+  }
+  if (templateSnapshotSub) {
+    for (const si of Object.keys(subColConfig)) {
+      const idx = parseInt(si, 10);
+      const block = subColConfig[idx];
+      const snapBlock = templateSnapshotSub[idx] || {};
+      for (const colKey of Object.keys(block)) {
+        const curr = block[colKey];
+        const snap = snapBlock[colKey];
+        if (!snap) {
+          if (curr.checked) changes.push({ type:'sub_added', label: findSubColLabel(idx, colKey) });
+          continue;
+        }
+        if (curr.checked !== snap.checked) {
+          changes.push({ type: curr.checked ? 'sub_enabled' : 'sub_disabled', label: findSubColLabel(idx, colKey) });
+        } else if (curr.checked && curr.customName !== snap.customName) {
+          changes.push({ type:'sub_renamed', label: findSubColLabel(idx, colKey), from: snap.customName, to: curr.customName });
+        }
+      }
+    }
+  }
+  if (scalePercent !== templateSnapshotScale) {
+    changes.push({ type:'scale', from: templateSnapshotScale, to: scalePercent });
+  }
+  return changes;
+}
+
+function hasChanges() { return getChanges().length > 0; }
+
+function renderChangeBanner() {
+  const banner = document.getElementById('changeBanner');
+  const changes = getChanges();
+  const tplName = selectedTemplate ? (templates.find(t => t.id === selectedTemplate)?.name || '未知模板') : '默认设置';
+
+  const noTemplates = !templates.length;
+  if (changes.length === 0 && !noTemplates) {
+    banner.innerHTML = '';
+  } else if (changes.length > 0) {
+    banner.innerHTML = '<div class="change-banner has-change">' +
+      '<span class="banner-icon">\u26a0\ufe0f</span>' +
+      '<span class="banner-text">\u4e0e\u6a21\u677f\u300c' + tplName + '\u300d\u76f8\u6bd4\u6709 <strong>' + changes.length + ' \u9879\u53d8\u66f4</strong></span>' +
+      '</div>';
+  }
+}
+
+// ============ STEP NAVIGATION ============
+function goToStep(step) {
+  if (step === currentStep) return;
+  if (currentStep === 3) syncFieldConfigFromDOM();
+  currentStep = step;
+  document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+  document.getElementById(`step-${step}`).classList.add('active');
+  document.querySelectorAll('.step-item').forEach(el => {
+    const s = parseInt(el.dataset.step);
+    el.classList.remove('active','done');
+    if (s === step) el.classList.add('active');
+    else if (s < step) el.classList.add('done');
+  });
+  document.querySelectorAll('.step-connector').forEach(el => el.classList.remove('done'));
+  if (step >= 2) document.getElementById('conn-1-2').classList.add('done');
+  if (step >= 3) document.getElementById('conn-2-3').classList.add('done');
+  if (step >= 4) document.getElementById('conn-3-4').classList.add('done');
+  if (step === 4) { renderPreview(); renderChangeBanner(); updateScaleUI(); }
+}
+
+// Live toggle unchecked class when user clicks a checkbox in step 3
+document.addEventListener('change', function(e) {
+  const cb = e.target;
+  if (cb.type !== 'checkbox') return;
+  const row = cb.closest('.field-row');
+  if (!row) return;
+  row.classList.toggle('unchecked', !cb.checked);
+});
+
+function syncFieldConfigFromDOM() {
+  document.querySelectorAll('.field-row').forEach(row => {
+    const cb = row.querySelector('input[type="checkbox"]');
+    const txt = row.querySelector('input[type="text"]');
+    if (!cb || !txt) return;
+    const key = cb.dataset.key;
+    const subIdx = cb.dataset.subIdx;
+    const colKey = cb.dataset.colKey;
+    if (subIdx !== undefined && subIdx !== '' && colKey) {
+      const si = parseInt(subIdx, 10);
+      if (subColConfig[si] && subColConfig[si][colKey]) {
+        subColConfig[si][colKey].checked = cb.checked;
+        subColConfig[si][colKey].customName = txt.value;
+      }
+    } else if (key && fieldConfig[key]) {
+      fieldConfig[key].checked = cb.checked;
+      fieldConfig[key].customName = txt.value;
+    }
+  });
+}
+
+// ============ STEP 1 ============
+function renderStep1() {
+  const grid = document.getElementById('invoiceInfoGrid');
+  const hint = document.getElementById('step1Hint');
+
+  let fields = Array.isArray(mainFieldsMeta) ? mainFieldsMeta.slice() : [];
+  if (!fields.length && row && typeof row === 'object') {
+    fields = Object.keys(row)
+      .filter(k => !k.startsWith('_') && !Array.isArray(row[k]) && typeof row[k] !== 'object')
+      .map(k => ({ key: k, label: k, group: 'basic' }));
+  }
+
+  if (hint) hint.textContent = '主表字段：' + fields.length + ' 个';
+
+  if (!grid) return;
+  if (!fields.length) {
+    grid.innerHTML = '<div class="info-section-rows"><div class="info-item"><span class="label">提示</span><span class="value empty">未读取到主表字段</span></div></div>';
+    return;
+  }
+
+  const groupOrder = ['basic', 'shipping', 'charge', 'bank'];
+  const groupMeta  = {
+    basic:    { label: '基本信息',    icon: '📋' },
+    shipping: { label: '运输 / 船务', icon: '🚢' },
+    charge:   { label: '费用相关',    icon: '💰' },
+    bank:     { label: '银行 / 账户', icon: '🏦' },
+  };
+
+  // Bucket fields into groups (preserve order within group)
+  const buckets = {};
+  groupOrder.forEach(g => { buckets[g] = []; });
+  fields.forEach(mf => {
+    const g = mf.group && buckets[mf.group] ? mf.group : 'basic';
+    buckets[g].push(mf);
+  });
+
+  let html = '';
+  groupOrder.forEach(gKey => {
+    const gFields = buckets[gKey];
+    if (!gFields.length) return;
+    const gm = groupMeta[gKey];
+    html += '<div class="info-section-block">';
+    html += '<div class="info-section-title"><span class="stitle-dot"></span>' + gm.icon + '&ensp;' + gm.label + '</div>';
+    html += '<div class="info-section-rows">';
+    gFields.forEach(mf => {
+      const v = formatCell(row[mf.key]);
+      const isEmpty = (v === '' || v == null);
+      const shown = isEmpty ? '—' : v;
+      let valHtml;
+      if (/^logo$/i.test(mf.key.trim()) && !isEmpty) {
+        const src = 'https://www.ragic.com.cn/sims/file.jsp?a=zyos&f=' + encodeURIComponent(shown);
+        valHtml = '<img class="logo-preview" src="' + src + '" alt="logo" onerror="this.style.display=\'none\'">'
+                + '<span style="font-size:11px;color:var(--text-muted);display:block;margin-top:2px">' + esc(shown) + '</span>';
+      } else {
+        valHtml = '<span class="value' + (isEmpty ? ' empty' : '') + '">' + esc(shown) + '</span>';
+      }
+      html += '<div class="info-item"><span class="label">' + esc(mf.label) + '</span>' + valHtml + '</div>';
+    });
+    // Pad to even column count
+    if (gFields.length % 2 !== 0) {
+      html += '<div class="info-item" style="background:var(--bg);cursor:default"></div>';
+    }
+    html += '</div></div>';
+  });
+
+  grid.innerHTML = html;
+}
+
+// ============ STEP 2 ============
+function renderTemplates() {
+  const grid = document.getElementById('templateGrid');
+  const btnSkip = document.getElementById('btnSkipTpl');
+  const btnNext = document.getElementById('btnNextTpl');
+  const noTpl = !templates.length;
+  const hasSel = !!selectedTemplate;
+  if (btnSkip) { btnSkip.className = 'btn btn-lg ' + (noTpl ? 'btn-primary' : 'btn-secondary'); }
+  if (btnNext) {
+    btnNext.className = 'btn btn-lg ' + (hasSel ? 'btn-primary' : 'btn-secondary');
+    btnNext.disabled = false; // clicks always register; tryGoToStep3 handles the guard
+  }
+  if (noTpl) {
+    grid.innerHTML = '<p style="color:var(--text-secondary);font-size:14px">暂无已存模板。完成字段配置后可在导出前保存到「打印模板」表（type=' + esc(PRINT_BOOT.scopeKey) + '）。</p>';
+    return;
+  }
+  grid.innerHTML = templates.map(t => {
+    const sel = selectedTemplate === t.id ? 'selected' : '';
+    const sc = (t.config && t.config.scale != null) ? t.config.scale : t.scale;
+    const delBtn = t.dbId
+      ? '<button class="tpl-del-btn" data-tid="' + escAttr(t.id) + '" title="删除此模板" onclick="event.stopPropagation();deleteTpl(\'' + escAttr(t.id) + '\')">&#x1F5D1;</button>'
+      : '';
+    return '<div class="template-card ' + sel + '" data-tid="' + escAttr(t.id) + '" style="position:relative">' +
+      delBtn +
+      '<div class="tpl-icon" style="background:' + escAttr(t.iconBg) + '">' + t.icon + '</div>' +
+      '<div class="tpl-name">' + esc(t.name) + '</div>' +
+      '<div class="tpl-meta">操作人ID：' + esc(String(t.creator)) + ' · ' + esc(t.createdAt) + '</div>' +
+      '<div class="tpl-meta" style="margin-top:2px">缩放：' + (sc && sc !== 100 ? sc + '%' : '100%') + '</div></div>';
+  }).join('');
+  grid.querySelectorAll('.template-card').forEach(card => {
+    card.addEventListener('click', function () {
+      selectTemplate(this.getAttribute('data-tid'));
+    });
+  });
+}
+
+function deleteTpl(tid) {
+  const t = templates.find(function(x){ return x.id === tid; });
+  if (!t || !t.dbId) { showToast('找不到该模板'); return; }
+  if (!confirm('确定要删除模板「' + (t.name || t.title || tid) + '」吗？此操作不可撤销。')) return;
+  if (!PRINT_BOOT.urls || !PRINT_BOOT.urls.tplDelete) { showToast('未配置删除接口'); return; }
+  const fd = new FormData();
+  fd.append('__token__', PRINT_BOOT.__token__ || '');
+  fd.append('id', String(t.dbId));
+  fetch(PRINT_BOOT.urls.tplDelete, { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) return r.text().then(function(tx){ throw new Error('HTTP ' + r.status + ': ' + tx.slice(0, 200)); });
+      return r.json();
+    })
+    .then(function(j) {
+      if (j.data && j.data.__token__) PRINT_BOOT.__token__ = j.data.__token__;
+      if (j.code === 1) {
+        templates = templates.filter(function(x){ return x.id !== tid; });
+        if (selectedTemplate === tid) selectedTemplate = null;
+        renderTemplates();
+        showToast('模板已删除');
+      } else {
+        showToast(j.msg || '删除失败');
+      }
+    })
+    .catch(function(e){ showToast('网络或接口异常：' + (e && e.message ? e.message : '')); });
+}
+
+function applySavedTpl(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  if (cfg.scale != null) scalePercent = parseInt(cfg.scale, 10) || 100;
+  const mf = cfg.mainFields || cfg.fields;
+  if (mf && typeof mf === 'object') {
+    for (const k of Object.keys(fieldConfig)) {
+      const cell = mf[k];
+      if (!cell || typeof cell !== 'object') continue;
+      if (typeof cell.checked === 'boolean') fieldConfig[k].checked = cell.checked;
+      if (cell.customName != null) fieldConfig[k].customName = String(cell.customName);
+      if (cell.alias != null) fieldConfig[k].customName = String(cell.alias);
+    }
+  }
+  const sf = cfg.subFields;
+  if (sf && typeof sf === 'object') {
+    Object.keys(subColConfig).forEach(idxStr => {
+      const block = sf[idxStr];
+      if (!block || typeof block !== 'object') return;
+      const si = parseInt(idxStr, 10);
+      if (!subColConfig[si]) return;
+      for (const colKey of Object.keys(subColConfig[si])) {
+        const cell = block[colKey];
+        if (!cell || typeof cell !== 'object') continue;
+        if (typeof cell.checked === 'boolean') subColConfig[si][colKey].checked = cell.checked;
+        if (cell.customName != null) subColConfig[si][colKey].customName = String(cell.customName);
+        if (cell.alias != null) subColConfig[si][colKey].customName = String(cell.alias);
+      }
+    });
+  }
+}
+
+function selectTemplate(id) {
+  selectedTemplate = id;
+  const tpl = templates.find(t => t.id === id);
+  if (tpl) {
+    initFieldConfig();
+    if (tpl.config) applySavedTpl(tpl.config);
+    scalePercent = (tpl.config && tpl.config.scale != null) ? (parseInt(tpl.config.scale, 10) || 100) : (tpl.scale || 100);
+    renderFieldConfig();
+    updateScaleUI();
+  }
+  takeSnapshot();
+  renderTemplates();
+}
+
+function tryGoToStep3() {
+  if (selectedTemplate) {
+    goToStep(3);
+  } else {
+    showToast('💡 请先点击选择一个模板，再进行下一步');
+    // 高亮模板区域提示
+    const grid = document.getElementById('templateGrid');
+    if (grid) {
+      grid.style.outline = '2px solid var(--primary)';
+      grid.style.borderRadius = '8px';
+      setTimeout(function(){ grid.style.outline = ''; grid.style.borderRadius = ''; }, 1800);
+    }
+  }
+}
+
+function skipTemplate() {
+  selectedTemplate = null;
+  initFieldConfig();
+  scalePercent = 100;
+  takeSnapshot();
+  renderTemplates();
+  renderFieldConfig();
+  goToStep(3);
+}
+
+// ============ STEP 3 ============
+function renderFieldConfig() {
+  renderFieldGroup('basicFieldsContainer', allFields.basic);
+  renderFieldGroup('shippingFieldsContainer', allFields.shipping);
+  renderFieldGroup('chargeFieldsContainer', allFields.charge);
+  renderFieldGroup('bankFieldsContainer', allFields.bank);
+  subTablesMeta.forEach((st, idx) => {
+    const el = document.getElementById('subFields_' + idx);
+    if (!el || !subFieldRegistry[idx]) return;
+    const cols = subFieldRegistry[idx].columns;
+    el.innerHTML = cols.map(c => {
+      const cfg = subColConfig[idx][c.colKey];
+      if (!cfg) return '';
+      const uc = cfg.checked ? '' : ' unchecked';
+      return '<div class="field-row' + uc + '">' +
+        '<input type="checkbox" data-sub-idx="' + idx + '" data-col-key="' + escAttr(c.colKey) + '" ' + (cfg.checked ? 'checked' : '') + '>' +
+        '<span class="field-original">' + esc(c.label) + '</span>' +
+        '<span class="arrow">→</span>' +
+        '<input type="text" value="' + escAttr(cfg.customName) + '" placeholder="列标题">' +
+        '</div>';
+    }).join('');
+  });
+}
+
+function renderFieldGroup(containerId, fields) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = fields.map(f => {
+    const cfg = fieldConfig[f.key];
+    if (!cfg) return '';
+    const uc = cfg.checked ? '' : ' unchecked';
+    return '<div class="field-row' + uc + '">' +
+      '<input type="checkbox" data-key="' + escAttr(f.key) + '" ' + (cfg.checked ? 'checked' : '') + '>' +
+      '<span class="field-original">' + esc(f.label) + '</span>' +
+      '<span class="arrow">→</span>' +
+      '<input type="text" value="' + escAttr(cfg.customName) + '" placeholder="自定义名称">' +
+      '</div>';
+  }).join('');
+}
+
+function selectAllFields() {
+  for (const k of Object.keys(fieldConfig)) fieldConfig[k].checked = true;
+  Object.keys(subColConfig).forEach(si => {
+    Object.keys(subColConfig[si]).forEach(ck => { subColConfig[si][ck].checked = true; });
+  });
+  renderFieldConfig();
+}
+function deselectAllFields() {
+  for (const k of Object.keys(fieldConfig)) fieldConfig[k].checked = false;
+  Object.keys(subColConfig).forEach(si => {
+    Object.keys(subColConfig[si]).forEach(ck => { subColConfig[si][ck].checked = false; });
+  });
+  renderFieldConfig();
+}
+
+// ============ SCALE ============
+function setScale(val) {
+  scalePercent = val;
+  updateScaleUI();
+  applyScale();
+  renderChangeBanner();
+}
+
+function updateScaleUI() {
+  document.getElementById('scaleSlider').value = scalePercent;
+  document.getElementById('scaleVal').textContent = scalePercent + '%';
+  document.querySelectorAll('.scale-presets button').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.textContent) === scalePercent);
+  });
+}
+
+function applyScale() {
+  const scaler = document.getElementById('invoiceScaler');
+  if (!scaler) return;
+  const ratio = scalePercent / 100;
+  scaler.style.transform = `scale(${ratio})`;
+  requestAnimationFrame(() => {
+    const preview = document.getElementById('invoicePreview');
+    if (preview) {
+      const h = preview.offsetHeight;
+      const w = preview.offsetWidth;
+      scaler.parentElement.style.minHeight = (h * ratio + 64) + 'px';
+      scaler.parentElement.style.minWidth = (w * ratio) + 'px';
+    }
+  });
+}
+
+// ============ PREVIEW ============
+function detectDocTypeBadge() {
+  var dt = (PRINT_BOOT.docType || '').toUpperCase();
+  if (dt === 'CN') return '<span class="inv-type-badge cn">CREDIT</span>';
+  if (dt === 'DN') return '<span class="inv-type-badge dn">DEBIT</span>';
+  return '<span class="inv-type-badge dn">PRINT</span>';
+}
+
+function headerCompanyBlock() {
+  // 结算组织：取 label 或 key 匹配"公司名称"的字段值
+  const orgMf  = mainFieldsMeta.find(m => /公司名称/i.test(m.label + m.key));
+  const orgName = orgMf ? formatCell(row[orgMf.key]) : '';
+
+  // Logo：取 label 或 key 匹配"LOGO"的字段值（Ragic 图片字段通常为 URL）
+  const logoMf  = mainFieldsMeta.find(m => /^logo$/i.test(m.label.trim()) || /^logo$/i.test(m.key.trim()));
+  const logoRaw = logoMf ? formatCell(row[logoMf.key]) : '';
+  const logoSrc = logoRaw ? 'https://www.ragic.com.cn/sims/file.jsp?a=zyos&f=' + encodeURIComponent(logoRaw) : '';
+
+  const logoHtml = logoSrc
+    ? '<img src="' + logoSrc + '" class="inv-logo-img" alt="logo" onerror="this.style.display=\'none\'">'
+    : '<div class="logo-box">#</div>';
+
+  const orgHtml = orgName
+    ? '<div class="inv-org-name">' + esc(orgName) + '</div>'
+    : '';
+
+  return '<div class="inv-logo">' + logoHtml + (orgHtml ? '<div>' + orgHtml + '</div>' : '') + '</div>';
+}
+
+function headerInvoiceBlock() {
+  return '<div class="inv-header-right">' + detectDocTypeBadge() + '</div>';
+}
+
+function pickSumColumn(subIdx, cols, rows) {
+  const preferred = ['Invoice Amount', '含税金额', '价税合计', '合计', '金额', 'Amount', 'Total', 'amt'];
+  for (const p of preferred) {
+    const c = cols.find(x => x.label === p || x.key === p);
+    if (c && rows.some(r => !isNaN(parseFloat(String(r[c.colKey]).replace(/,/g, ''))))) return c.colKey;
+  }
+  for (let i = cols.length - 1; i >= 0; i--) {
+    const ck = cols[i].colKey;
+    if (rows.some(r => !isNaN(parseFloat(String(r[ck]).replace(/,/g, ''))))) return ck;
+  }
+  return null;
+}
+
+function sumNumericColumn(rows, colKey) {
+  let t = 0;
+  let n = 0;
+  for (const r of rows) {
+    const v = parseFloat(String(r[colKey] != null ? r[colKey] : '').replace(/,/g, ''));
+    if (!isNaN(v)) { t += v; n++; }
+  }
+  return n ? t : null;
+}
+
+function renderPreview() {
+  const preview = document.getElementById('invoicePreview');
+  const fc = fieldConfig;
+  const f = (key) => fc[key] && fc[key].checked;
+  const n = (key) => (fc[key] && fc[key].customName) || key;
+
+  // 找到 Total 字段，单独在表格下方显示
+  const totalMf = mainFieldsMeta.find(m => /^total[^a-z]/i.test(m.label + ':') || /^total[^a-z]/i.test(m.key + ':'));
+  const totalVal = (totalMf && f(totalMf.key)) ? formatCell(row[totalMf.key]) : '';
+  const totalLabel = totalMf ? esc((n(totalMf.key) || totalMf.label || 'Total').replace(/:+$/, '')) : 'Total';
+
+  let metaHtml = '';
+  for (const mf of mainFieldsMeta) {
+    if (mf.group === 'bank') continue;
+    if (/prepared.by|prepared_by/i.test(mf.label + mf.key)) continue;
+    // Total 字段移到表格下方，不在顶部 meta 显示
+    if (totalMf && mf.key === totalMf.key) continue;
+    const key = mf.key;
+    const val = formatCell(row[key]);
+    if (!val) continue;
+    if (f(key)) {
+      metaHtml += '<div class="inv-meta-item"><span class="k">' + esc(n(key).replace(/:+$/, '')) + ':</span><span class="v">' + esc(val) + '</span></div>';
+    }
+  }
+
+  let bankHtml = '';
+  const isCreditNote = (PRINT_BOOT.docType || '').toUpperCase() === 'CN';
+  if (!isCreditNote) {
+    for (const mf of mainFieldsMeta) {
+      if (mf.group !== 'bank') continue;
+      const key = mf.key;
+      const val = formatCell(row[key]);
+      if (!val || !f(key)) continue;
+      bankHtml += '<div class="inv-bank-row"><span class="k">' + esc(n(key)) + ':</span><span>' + esc(val) + '</span></div>';
+    }
+  }
+
+  let subHtml = '';
+  subTablesMeta.forEach((st, idx) => {
+    const rows = row[st.key];
+    if (!Array.isArray(rows) || !rows.length || !subFieldRegistry[idx]) return;
+    const cols = subFieldRegistry[idx].columns.filter(c => subColConfig[idx][c.colKey] && subColConfig[idx][c.colKey].checked);
+    if (!cols.length) return;
+    const hdr = cols.map(c => '<th>' + esc(subColConfig[idx][c.colKey].customName || c.label) + '</th>').join('');
+    const body = rows.map(r => '<tr>' + cols.map(c => '<td>' + esc(formatCell(r[c.colKey])) + '</td>').join('') + '</tr>').join('');
+    subHtml += '<div class="inv-table-wrap"><table class="inv-table"><thead><tr>' + hdr + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+  });
+
+  const prepMf = mainFieldsMeta.find(m => /prepared.by|prepared_by/i.test(m.label + m.key));
+  const prepVal = prepMf ? formatCell(row[prepMf.key]) : '';
+
+  const companyMf = mainFieldsMeta.find(m => /公司名称|Company|抬头/i.test(m.label + m.key));
+  const sigName = (companyMf && row[companyMf.key]) ? esc(formatCell(row[companyMf.key])) : esc(PRINT_BOOT.sheetTitle || '');
+
+  const totalHtml = totalVal
+    ? '<div class="inv-total-bar"><span class="inv-total-label">' + totalLabel + '</span><span class="inv-total-value">' + esc(totalVal) + '</span></div>'
+    : '';
+
+  preview.innerHTML =
+    '<div class="inv-header">' + headerCompanyBlock() + headerInvoiceBlock() + '</div>' +
+    '<div class="inv-meta-grid">' + metaHtml + '</div>' +
+    subHtml +
+    totalHtml +
+    '<div class="inv-bank-sig-row">' +
+    (bankHtml ? '<div class="inv-bank"><div class="inv-bank-title">Bank Details</div>' + bankHtml + '</div>' : '<div></div>') +
+    '<div class="inv-footer">' +
+    '<div class="sig-area">' +
+    (prepVal ? '<div style="font-size:0.85em;color:var(--text-secondary);margin-bottom:4px">Prepared by: <strong>' + esc(prepVal) + '</strong></div>' : '') +
+    '<div class="sig-line"></div>' +
+    '<div class="sig-label">Authorized Signature(s)</div>' +
+    '</div></div>' +
+    '</div>';
+
+  requestAnimationFrame(() => applyScale());
+}
+
+// ============ SAVE TEMPLATE MODAL ============
+function showSaveModal() {
+  try {
+    const changes = getChanges();
+    let html = '<div class="change-detail-list">';
+    const limit = Math.min(changes.length, 50);
+    for (let i = 0; i < limit; i++) {
+      const c = changes[i];
+      const lbl = String(c.label != null ? c.label : '');
+      if (c.type==='enabled' || c.type==='sub_enabled') html+='<div class="change-detail-item"><span class="cd-icon">&#x1F7E2;</span><span class="cd-label">'+lbl+'</span> \u5df2\u542f\u7528</div>';
+      else if (c.type==='disabled' || c.type==='sub_disabled') html+='<div class="change-detail-item"><span class="cd-icon">&#x1F534;</span><span class="cd-label">'+lbl+'</span> \u5df2\u7981\u7528</div>';
+      else if (c.type==='renamed' || c.type==='sub_renamed') html+='<div class="change-detail-item"><span class="cd-icon">&#x270F;&#xFE0F;</span><span class="cd-label">'+lbl+'</span> \u91cd\u547d\u540d\uff1a'+String(c.from)+' \u2192 '+String(c.to)+'</div>';
+      else if (c.type==='added' || c.type==='sub_added') html+='<div class="change-detail-item"><span class="cd-icon">&#x2795;</span><span class="cd-label">'+lbl+'</span></div>';
+      else if (c.type==='scale') html+='<div class="change-detail-item"><span class="cd-icon">&#x1F50D;</span>\u7f29\u653e\u6bd4\u4f8b\uff1a'+c.from+'% \u2192 '+c.to+'%</div>';
+    }
+    if (changes.length > 50) html += '<div class="change-detail-item" style="color:var(--text-muted)">...共 '+changes.length+' 项变更</div>';
+    html += '</div>';
+    var cdc = document.getElementById('changeDetailContainer');
+    if (cdc) cdc.innerHTML = html;
+
+    // 判断是否已选中一个 DB 模板（有 dbId）
+    const selTpl = selectedTemplate ? templates.find(function(t){ return t.id === selectedTemplate; }) : null;
+    const hasDbTpl = !!(selTpl && selTpl.dbId);
+
+    // 切换 UI 模式
+    var title = document.getElementById('saveModalTitle');
+    var modeCurrent = document.getElementById('saveModeCurrent');
+    var modeNewForm = document.getElementById('saveModeNewForm');
+    var btnUpdate = document.getElementById('btnUpdateTpl');
+    var btnNew = document.getElementById('btnSaveNew');
+    var curName = document.getElementById('saveModeCurName');
+
+    if (hasDbTpl) {
+      if (title) title.textContent = '💾 保存模板';
+      if (modeCurrent) modeCurrent.style.display = 'block';
+      if (curName) curName.value = selTpl.name || selTpl.title || ('模板#' + selTpl.dbId);
+      var curCode = document.getElementById('saveModeCurCode');
+      if (curCode) curCode.textContent = selTpl.code || '';
+      if (modeNewForm) modeNewForm.style.display = 'none';
+      if (btnUpdate) btnUpdate.style.display = '';
+      if (btnNew) btnNew.textContent = '另存为新模板';
+    } else {
+      var modePick = document.getElementById('saveModePick');
+      var pickSelect = document.getElementById('savePickTplSelect');
+      var btnPick = document.getElementById('btnPickTpl');
+      if (templates.length > 0) {
+        if (title) title.textContent = '💾 保存模板';
+        if (modeCurrent) modeCurrent.style.display = 'none';
+        if (modePick) {
+          modePick.style.display = 'block';
+          if (pickSelect) {
+            pickSelect.innerHTML = templates.map(function(t) {
+              return '<option value="' + escAttr(String(t.id)) + '">' + esc(t.name || t.title || ('模板#' + (t.dbId || t.id))) + '</option>';
+            }).join('');
+          }
+        }
+        if (btnPick) btnPick.style.display = '';
+        if (modeNewForm) modeNewForm.style.display = 'block';
+        if (btnUpdate) btnUpdate.style.display = 'none';
+        if (btnNew) { btnNew.textContent = '另存为新模板'; }
+      } else {
+        if (title) title.textContent = '💾 另存为新模板';
+        if (modeCurrent) modeCurrent.style.display = 'none';
+        if (modePick) modePick.style.display = 'none';
+        if (btnPick) btnPick.style.display = 'none';
+        if (modeNewForm) modeNewForm.style.display = 'block';
+        if (btnUpdate) btnUpdate.style.display = 'none';
+        if (btnNew) { btnNew.textContent = '保存新模板'; }
+      }
+    }
+
+    // 点"另存为新模板"时才展开输入框
+    if (btnNew) {
+      btnNew.onclick = function() {
+        if (hasDbTpl && modeNewForm && modeNewForm.style.display === 'none') {
+          // 展开另存表单：把旧模板名改成只读文本，隐藏 code
+          modeNewForm.style.display = 'block';
+          btnNew.textContent = '确认另存为新模板';
+          // 旧名称改为只读显示
+          var nameEl = document.getElementById('saveModeCurName');
+          if (nameEl) {
+            var nameVal = nameEl.value;
+            var readonlyDiv = document.createElement('div');
+            readonlyDiv.id = 'saveModeCurNameReadonly';
+            readonlyDiv.style.cssText = 'font-size:13px;color:var(--text-muted,#6b7280);margin-bottom:12px;';
+            readonlyDiv.innerHTML = '基于模板：<strong style="color:var(--text-main,#111827)">' + nameVal.replace(/</g,'&lt;') + '</strong>';
+            nameEl.parentNode.style.display = 'none';
+            nameEl.parentNode.parentNode.insertBefore(readonlyDiv, nameEl.parentNode);
+          }
+          // 隐藏 code 行
+          var codeRow = document.querySelector('#saveModeCurrent > div:first-child');
+          if (codeRow) codeRow.style.display = 'none';
+          // 进入"另存为新模板"模式后，隐藏"覆盖更新此模板"按钮（避免用户误点且此时上下文已变更）
+          if (btnUpdate) btnUpdate.style.display = 'none';
+          var ti = document.getElementById('saveTplTitle');
+          if (ti) ti.focus();
+        } else {
+          saveAsNewTemplate();
+        }
+      };
+    }
+
+    var overlay = document.getElementById('saveTemplateModal');
+    if (!overlay) { showToast('找不到模态框元素，请刷新页面'); return; }
+    overlay.style.display = 'flex';
+    overlay.classList.add('show');
+  } catch (err) {
+    showToast('打开对话框出错：' + (err && err.message ? err.message : String(err)));
+  }
+}
+
+function closeModal() {
+  var overlay = document.getElementById('saveTemplateModal');
+  if (overlay) { overlay.style.display = 'none'; overlay.classList.remove('show'); }
+  // 重置"另存"按钮文本和新表单状态
+  var btnNew = document.getElementById('btnSaveNew');
+  if (btnNew) btnNew.textContent = '保存并导出';
+  var modeNewForm = document.getElementById('saveModeNewForm');
+  if (modeNewForm) modeNewForm.style.display = 'block';
+  // 重置选择模板下拉框
+  var modePick = document.getElementById('saveModePick');
+  if (modePick) modePick.style.display = 'none';
+  var btnPick = document.getElementById('btnPickTpl');
+  if (btnPick) btnPick.style.display = 'none';
+  // 清理"另存"展开时插入的只读节点
+  var ro = document.getElementById('saveModeCurNameReadonly');
+  if (ro) ro.parentNode.removeChild(ro);
+  // 恢复旧模板名输入框和 code 行
+  var nameEl = document.getElementById('saveModeCurName');
+  if (nameEl && nameEl.parentNode) nameEl.parentNode.style.display = '';
+  var codeRow = document.querySelector('#saveModeCurrent > div:first-child');
+  if (codeRow) codeRow.style.display = '';
+}
+
+function updateExistingTemplate() {
+  const selTpl = selectedTemplate ? templates.find(function(t){ return t.id === selectedTemplate; }) : null;
+  if (!selTpl || !selTpl.dbId) { showToast('未找到要更新的模板'); return; }
+  if (!PRINT_BOOT.urls || !PRINT_BOOT.urls.tplUpdate) { showToast('未配置更新接口'); return; }
+  const nameEl = document.getElementById('saveModeCurName');
+  const newName = nameEl ? nameEl.value.trim() : '';
+  if (!newName) {
+    showToast('模板名称不能为空');
+    if (nameEl) { nameEl.focus(); nameEl.style.borderColor = 'var(--danger)'; setTimeout(function(){ nameEl.style.borderColor = ''; }, 2000); }
+    return;
+  }
+  const fd = new FormData();
+  fd.append('__token__', PRINT_BOOT.__token__ || '');
+  fd.append('id', String(selTpl.dbId));
+  fd.append('title', newName);
+  fd.append('tpl', JSON.stringify(buildTplPayload()));
+  fetch(PRINT_BOOT.urls.tplUpdate, { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) return r.text().then(function(t){ throw new Error('HTTP ' + r.status + ': ' + t.slice(0, 200)); });
+      return r.json();
+    })
+    .then(function(j) {
+      if (j.data && j.data.__token__) PRINT_BOOT.__token__ = j.data.__token__;
+      if (j.code === 1) {
+        const idx = templates.findIndex(function(t){ return t.id === selectedTemplate; });
+        if (idx >= 0) {
+          templates[idx].config = buildTplPayload();
+          templates[idx].name = newName;
+          templates[idx].title = newName;
+        }
+        takeSnapshot();
+        renderTemplates();
+        renderChangeBanner();
+        closeModal();
+        showToast('模板已更新');
+      } else {
+        showToast(j.msg || '更新失败');
+      }
+    })
+    .catch(function(e) { showToast('网络或接口异常：' + (e && e.message ? e.message : '')); });
+}
+
+function updatePickedTemplate() {
+  var pickSel = document.getElementById('savePickTplSelect');
+  var tid = pickSel ? pickSel.value : null;
+  if (!tid) { showToast('请先选择一个模板'); return; }
+  var tpl = templates.find(function(t){ return t.id === tid; });
+  if (!tpl || !tpl.dbId) { showToast('找不到该模板'); return; }
+  if (!PRINT_BOOT.urls || !PRINT_BOOT.urls.tplUpdate) { showToast('未配置更新接口'); return; }
+  const fd = new FormData();
+  fd.append('__token__', PRINT_BOOT.__token__ || '');
+  fd.append('id', String(tpl.dbId));
+  fd.append('tpl', JSON.stringify(buildTplPayload()));
+  fetch(PRINT_BOOT.urls.tplUpdate, { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) return r.text().then(function(tx){ throw new Error('HTTP ' + r.status + ': ' + tx.slice(0, 200)); });
+      return r.json();
+    })
+    .then(function(j) {
+      if (j.data && j.data.__token__) PRINT_BOOT.__token__ = j.data.__token__;
+      if (j.code === 1) {
+        const idx = templates.findIndex(function(t){ return t.id === tid; });
+        if (idx >= 0) templates[idx].config = buildTplPayload();
+        selectedTemplate = tid;
+        takeSnapshot();
+        renderTemplates();
+        renderChangeBanner();
+        closeModal();
+        showToast('模板已更新');
+      } else {
+        showToast(j.msg || '更新失败');
+      }
+    })
+    .catch(function(e){ showToast('网络或接口异常：' + (e && e.message ? e.message : '')); });
+}
+
+function buildTplPayload() {
+  const mainFields = {};
+  for (const k of Object.keys(fieldConfig)) {
+    mainFields[k] = { checked: !!fieldConfig[k].checked, customName: fieldConfig[k].customName };
+  }
+  const subFields = {};
+  Object.keys(subColConfig).forEach(si => {
+    subFields[si] = {};
+    for (const ck of Object.keys(subColConfig[si])) {
+      subFields[si][ck] = {
+        checked: !!subColConfig[si][ck].checked,
+        customName: subColConfig[si][ck].customName
+      };
+    }
+  });
+  return { version: 1, scale: scalePercent, mainFields: mainFields, subFields: subFields };
+}
+
+function saveAsNewTemplate() {
+  const titleEl = document.getElementById('saveTplTitle');
+  const remarkEl = document.getElementById('saveTplRemark');
+  const title = titleEl ? titleEl.value.trim() : '';
+  const remark = remarkEl ? remarkEl.value.trim() : '';
+  if (!title) {
+    showToast('请输入模板名称');
+    if (titleEl) {
+      titleEl.focus();
+      titleEl.style.borderColor = 'var(--danger)';
+      titleEl.style.boxShadow = '0 0 0 3px rgba(239,68,68,0.2)';
+      setTimeout(function(){ titleEl.style.borderColor = ''; titleEl.style.boxShadow = ''; }, 2000);
+    }
+    return;
+  }
+  if (!PRINT_BOOT.urls || !PRINT_BOOT.urls.tplSave) { showToast('未配置保存接口'); return; }
+  const fd = new FormData();
+  fd.append('__token__', PRINT_BOOT.__token__ || '');
+  fd.append('docType', PRINT_BOOT.docType || '');
+  fd.append('title', title);
+  fd.append('tpl', JSON.stringify(buildTplPayload()));
+  fd.append('remark', remark);
+  fetch(PRINT_BOOT.urls.tplSave, { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function(r) {
+      if (!r.ok) return r.text().then(function(t){ throw new Error('HTTP ' + r.status + ': ' + t.slice(0,200)); });
+      return r.json();
+    })
+    .then(j => {
+      if (j.data && j.data.__token__) PRINT_BOOT.__token__ = j.data.__token__;
+      if (j.code === 1) {
+        const nid = (j.data && j.data.id) ? j.data.id : Date.now();
+        const code = (j.data && j.data.code) ? j.data.code : ('tpl_' + nid);
+        templates.unshift({
+          id: 'db-' + nid,
+          dbId: nid,
+          title: title,
+          name: title,
+          code: code,
+          remark: remark,
+          creator: String(PRINT_BOOT.adminNickname || ''),
+          createdAt: new Date().toISOString().split('T')[0],
+          type: 'saved',
+          icon: '📋',
+          iconBg: '#dcfce7',
+          scale: scalePercent,
+          config: buildTplPayload()
+        });
+        selectedTemplate = templates[0].id;
+        takeSnapshot();
+        renderTemplates();
+        renderChangeBanner();
+        closeModal();
+        showToast('已保存到 crdnprinter_tpl');
+        if (titleEl) titleEl.value = '';
+        if (remarkEl) remarkEl.value = '';
+      } else {
+        showToast(j.msg || '保存失败');
+      }
+    })
+    .catch(function () { showToast('网络或接口异常'); });
+}
+
+function skipSaveAndExport() {
+  closeModal();
+  performExport();
+}
+
+// ============ EXPORT ============
+function setExportType(type, btn) {
+  exportType = type;
+  document.querySelectorAll('.export-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function doExport() {
+  performExport();
+}
+
+function performExport() {
+  if (exportType === 'pdf') {
+    showToast('请使用浏览器打印，并选择「另存为 PDF」');
+    setTimeout(doPrint, 400);
+    return;
+  }
+  logPrintAction(2, 'Excel');
+  var btn = document.getElementById('btnExport');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 导出中…'; }
+  generateExcel().finally(function() {
+    if (btn) { btn.disabled = false; btn.innerHTML = '🚀 导出文件'; }
+  });
+}
+
+function doPrint() {
+  logPrintAction(1, 'Print');
+  var printRoot = document.getElementById('printRoot');
+  var scaler = document.getElementById('invoiceScaler');
+  if (!printRoot || !scaler) { window.print(); return; }
+  printRoot.innerHTML = '';
+  var clone = scaler.cloneNode(true);
+  clone.style.transform = '';           // clear screen transform on scaler
+  clone.style.transformOrigin = '';
+  var preview = clone.querySelector && clone.querySelector('.invoice-preview');
+  if (preview) {
+    // CSS zoom affects actual layout + print size, unlike transform
+    preview.style.zoom = String(scalePercent / 100);
+    preview.style.transform = '';
+    preview.style.width = '';           // let parent width control it
+  }
+  printRoot.appendChild(clone);
+  try {
+    window.print();
+  } finally {
+    setTimeout(function(){ printRoot.innerHTML = ''; }, 500);
+  }
+}
+
+async function generateExcel() {
+  var f  = function(key){ return fieldConfig[key] && fieldConfig[key].checked; };
+  var n  = function(key){ return (fieldConfig[key] && fieldConfig[key].customName) || key; };
+  var x  = function(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  };
+  var fv = function(key){ return x(formatCell(row[key]) || ''); };
+
+  var docType   = (PRINT_BOOT.docType || '').toUpperCase();
+  var badgeText = docType === 'CN' ? 'CREDIT' : docType === 'DN' ? 'DEBIT' : (docType || 'PRINT');
+  var badgeBg   = docType === 'CN' ? '#fef3c7' : '#dbeafe';
+  var badgeFg   = docType === 'CN' ? '#92400e'  : '#1e40af';
+
+  // ── Collect enabled sub-table columns ──
+  var subColsList = [];
+  var maxCols = 8; // ensure wide enough for standard invoice
+  subTablesMeta.forEach(function(st, idx) {
+    var cols = subFieldRegistry[idx]
+      ? subFieldRegistry[idx].columns.filter(function(c){
+          return subColConfig[idx][c.colKey] && subColConfig[idx][c.colKey].checked;
+        })
+      : [];
+    subColsList.push(cols);
+    if (cols.length > maxCols) maxCols = cols.length;
+  });
+  if (maxCols % 2 !== 0) maxCols++; // keep even for symmetric 2-col layout
+  var half = maxCols / 2;
+  // Left info section: col 0 = label (1 col), cols 1..(half-1) = value
+  var LLBL = 1, LVAL = half - 1;
+  // Right info section: col half = label (1 col), cols (half+1)..(maxCols-1) = value
+  var RLBL = 1, RVAL = half - 1;
+
+  // ── Find Total field ──
+  var totalMf = mainFieldsMeta.find(function(m){
+    return /^total[^a-z]/i.test(m.label + ':') || /^total[^a-z]/i.test(m.key + ':');
+  });
+  var totalVal  = (totalMf && f(totalMf.key)) ? fv(totalMf.key) : '';
+  var totalLblT = totalMf ? x((n(totalMf.key) || totalMf.label || 'TOTAL').toUpperCase()) : 'TOTAL';
+
+  // ── Dynamic meta fields (mirrors PDF 2-col grid) ──
+  var bankFieldKeys = ['bank_name','bank_address','swift_code','beneficiary','account_no','ach_x2f_domestic_wire_routing_no'];
+  var xlsMetaFields = mainFieldsMeta.filter(function(mf) {
+    if (mf.group === 'bank') return false;
+    if (/prepared.by|prepared_by/i.test(mf.label + mf.key)) return false;
+    if (/^logo$/i.test(mf.label.trim()) || /^logo$/i.test(mf.key.trim())) return false;
+    if (/^g_s_name$/i.test(mf.key) || /^g_s_addr$/i.test(mf.key)) return false;
+    if (totalMf && mf.key === totalMf.key) return false;
+    if (!f(mf.key)) return false;
+    return !!(formatCell(row[mf.key]));
+  });
+
+  function getMf(key){ return mainFieldsMeta.find(function(m){ return m.key === key; }) || null; }
+  function isVisible(key){ var m = getMf(key); return !!(m && f(m.key)); }
+  function labelOf(key){ var m = getMf(key); return m ? x(n(m.key).replace(/:+$/, '')) : x(key); }
+  function valOf(key){ var m = getMf(key); return m ? fv(m.key) : ''; }
+  function isNumericCol(c){
+    return /price|qty|quantity|amount|total|count/i.test(c.colKey + ' ' + c.label);
+  }
+
+  // ── Build output ──
+  var s = [];
+  s.push('<html xmlns:o="urn:schemas-microsoft-com:office:office"'
+       + ' xmlns:x="urn:schemas-microsoft-com:office:excel"'
+       + ' xmlns="http://www.w3.org/TR/REC-html40">');
+  s.push('<head><meta charset="UTF-8"><style>');
+  s.push('table{border-collapse:collapse;font-family:Calibri,"Microsoft YaHei",Arial,sans-serif;font-size:10pt;width:100%}');
+  s.push('</style></head><body>\n<table>\n');
+
+  // Column width hints
+  s.push('<colgroup>');
+  s.push('<col style="width:320px">'); // col 0: label / logo
+  for (var ci = 1; ci < maxCols; ci++) {
+    s.push('<col style="width:' + Math.round(550 / (maxCols - 1)) + 'pt">');
+  }
+  s.push('</colgroup>\n');
+
+  // ── Header: Logo (base64 embedded) | Company Name | Badge ──
+  var xlsLogoMf  = mainFieldsMeta.find(function(m){ return /^logo$/i.test(m.label.trim()) || /^logo$/i.test(m.key.trim()); });
+  var xlsLogoRaw = xlsLogoMf ? (formatCell(row[xlsLogoMf.key]) || '') : '';
+  var xlsLogoSrc = xlsLogoRaw ? 'https://www.ragic.com.cn/sims/file.jsp?a=zyos&f=' + encodeURIComponent(xlsLogoRaw) : '';
+  var xlsOrgMf   = mainFieldsMeta.find(function(m){ return /公司名称|g_s_name/i.test(m.label + m.key); });
+  var xlsOrgName = xlsOrgMf ? x(formatCell(row[xlsOrgMf.key]) || '') : '';
+
+  // Fetch logo as base64 via server-side proxy (avoids CORS)
+  var xlsLogoB64 = '';
+  if (xlsLogoSrc && PRINT_BOOT.urls && PRINT_BOOT.urls.proxyImg) {
+    try {
+      var proxyUrl = PRINT_BOOT.urls.proxyImg + '?url=' + encodeURIComponent(xlsLogoSrc);
+      var proxyResp = await fetch(proxyUrl, { credentials: 'same-origin' });
+      var proxyJson = await proxyResp.json();
+      if (proxyJson.code === 1 && proxyJson.data) xlsLogoB64 = proxyJson.data;
+    } catch(e) {}
+  }
+
+  // Logo in 1 column; image keeps natural aspect, left-aligned inside a wider cell.
+  var logoColspan = 1;
+  var COL_W  = 320; // px, first column width
+  var ROW_H  = 70;  // px, header row height
+  var LOGO_H = 56;  // px, logo image height (aspect-preserved)
+  var xlsImgTag = function(src) {
+    return '<img src="' + src + '" height="' + LOGO_H + '"'
+         + ' style="display:block;margin:0;padding:0;height:' + LOGO_H + 'px;width:auto">';
+  };
+  var xlsLogoCell = xlsLogoB64 ? xlsImgTag(xlsLogoB64)
+                 : (xlsLogoSrc ? xlsImgTag(xlsLogoSrc) : '');
+  var xlsNameCell = xlsOrgName
+    ? '<td colspan="' + (LVAL + RLBL) + '" style="background:#fff;font-size:13pt;font-weight:700;color:#1a1d26;padding:4px 8px;vertical-align:middle">' + xlsOrgName + '</td>'
+    : '<td colspan="' + (LVAL + RLBL) + '" style="background:#fff;padding:4px"></td>';
+
+  s.push('<tr style="height:' + ROW_H + 'px">');
+  s.push('<td colspan="' + logoColspan + '" width="' + COL_W + '" height="' + ROW_H + '"'
+       + ' style="background:#fff;padding:4px 8px;margin:0;width:' + COL_W + 'px;height:' + ROW_H + 'px;'
+       + 'vertical-align:middle;text-align:left">' + xlsLogoCell + '</td>');
+  s.push(xlsNameCell);
+  s.push('<td colspan="' + (RVAL - 1) + '" style="background:#fff;padding:6px"></td>');
+  s.push('<td style="background:' + badgeBg + ';color:' + badgeFg + ';font-size:13pt;font-weight:700;'
+       + 'padding:8px 18px;text-align:center;letter-spacing:2px;white-space:nowrap;'
+       + 'border:2px solid ' + badgeFg + '">' + x(badgeText) + '</td>');
+  s.push('</tr>\n');
+
+  // Thick separator
+  s.push('<tr><td colspan="' + maxCols + '" style="background:#1a1d26;height:3pt;padding:0;font-size:1pt">&nbsp;</td></tr>\n');
+  s.push('<tr><td colspan="' + maxCols + '" style="height:5pt;padding:0;font-size:1pt">&nbsp;</td></tr>\n');
+
+  // ── Info rows — dynamic, mirrors PDF 2-col grid (pairs: 0+1, 2+3, …) ──
+  var infoRowCnt = Math.ceil(xlsMetaFields.length / 2);
+  for (var i = 0; i < infoRowCnt; i++) {
+    var lMf = xlsMetaFields[i * 2]     || null;
+    var rMf = xlsMetaFields[i * 2 + 1] || null;
+    s.push('<tr>');
+    s.push('<td colspan="' + LLBL + '" style="color:#6b7280;font-weight:600;font-size:9.5pt;'
+         + 'padding:4px 6px;white-space:nowrap;vertical-align:top">'
+         + (lMf ? x(n(lMf.key).replace(/:+$/, '')) + ':' : '') + '</td>');
+    s.push('<td colspan="' + LVAL + '" style="color:#111827;font-size:9.5pt;'
+         + 'padding:4px 8px;vertical-align:top">'
+         + (lMf ? x(formatCell(row[lMf.key]) || '') : '') + '</td>');
+    s.push('<td colspan="' + RLBL + '" style="color:#6b7280;font-weight:600;font-size:9.5pt;'
+         + 'padding:4px 6px 4px 16px;white-space:nowrap;vertical-align:top;border-left:2px solid #e5e7eb">'
+         + (rMf ? x(n(rMf.key).replace(/:+$/, '')) + ':' : '') + '</td>');
+    s.push('<td colspan="' + RVAL + '" style="color:#111827;font-size:9.5pt;'
+         + 'padding:4px 8px;vertical-align:top">'
+         + (rMf ? x(formatCell(row[rMf.key]) || '') : '') + '</td>');
+    s.push('</tr>\n');
+  }
+
+  s.push('<tr><td colspan="' + maxCols + '" style="height:8pt;padding:0;font-size:1pt">&nbsp;</td></tr>\n');
+
+  // ── Sub-tables (charge items) ──
+  subTablesMeta.forEach(function(st, idx) {
+    var stRows = row[st.key];
+    if (!Array.isArray(stRows) || !stRows.length) return;
+    var cols = subColsList[idx];
+    if (!cols.length) return;
+
+    // Column header row
+    s.push('<tr>');
+    cols.forEach(function(c) {
+      var align = isNumericCol(c) ? 'right' : 'left';
+      s.push('<td style="background:#f1f5f9;color:#374151;font-weight:700;font-size:8.5pt;'
+           + 'padding:7px 8px;border:1px solid #cbd5e1;text-transform:uppercase;'
+           + 'letter-spacing:0.3px;white-space:nowrap;text-align:' + align + '">'
+           + x(subColConfig[idx][c.colKey].customName || c.label) + '</td>');
+    });
+    for (var j = cols.length; j < maxCols; j++) {
+      s.push('<td style="background:#f1f5f9;border:1px solid #cbd5e1"></td>');
+    }
+    s.push('</tr>\n');
+
+    // Data rows
+    stRows.forEach(function(r, ri) {
+      var bg = ri % 2 === 0 ? '#ffffff' : '#f8fafc';
+      s.push('<tr>');
+      cols.forEach(function(c) {
+        var align = isNumericCol(c) ? 'right' : 'left';
+        s.push('<td style="background:' + bg + ';padding:5px 8px;border:1px solid #e2e8f0;'
+             + 'font-size:9.5pt;vertical-align:top;text-align:' + align + '">'
+             + x(formatCell(r[c.colKey])) + '</td>');
+      });
+      for (var j = cols.length; j < maxCols; j++) {
+        s.push('<td style="background:' + bg + ';border:1px solid #e2e8f0"></td>');
+      }
+      s.push('</tr>\n');
+    });
+
+    // Total row (right-aligned, thick top border)
+    if (totalVal) {
+      s.push('<tr>');
+      for (var j = 0; j < maxCols - 2; j++) {
+        s.push('<td style="border-top:2pt solid #1a1d26;padding:6px 8px"></td>');
+      }
+      s.push('<td style="border-top:2pt solid #1a1d26;border-bottom:1px solid #e2e8f0;'
+           + 'font-weight:700;font-size:10pt;padding:6px 8px;text-align:right;'
+           + 'letter-spacing:.5px;color:#374151">' + totalLblT + '</td>');
+      s.push('<td style="border-top:2pt solid #1a1d26;border-bottom:1px solid #e2e8f0;'
+           + 'font-weight:700;font-size:11pt;padding:6px 8px;text-align:right;'
+           + 'color:#111827">' + totalVal + '</td>');
+      s.push('</tr>\n');
+    }
+  });
+
+  s.push('<tr><td colspan="' + maxCols + '" style="height:10pt;padding:0;font-size:1pt">&nbsp;</td></tr>\n');
+
+  // ── Bank Details + Prepared by / Authorized Signature ──
+  var xlsIsCN = (PRINT_BOOT.docType || '').toUpperCase() === 'CN';
+  var bankMfs = (!xlsIsCN)
+    ? bankFieldKeys.map(getMf).filter(function(m){ return m && f(m.key) && formatCell(row[m.key]); })
+    : [];
+  var prepMf  = mainFieldsMeta.find(function(m){ return /prepared.by|prepared_by/i.test(m.label + m.key); });
+  var prepVal = prepMf ? formatCell(row[prepMf.key]) : '';
+
+  if (bankMfs.length || prepVal) {
+    var bkCols = Math.max(2, Math.round(maxCols * 0.55));
+    var sgCols = maxCols - bkCols;
+    var bankLen = bankMfs.length;
+
+    // Section title row
+    s.push('<tr>');
+    s.push('<td colspan="' + bkCols + '" style="color:#374151;font-weight:700;font-size:9pt;'
+         + 'text-transform:uppercase;letter-spacing:.5px;padding:8px 4px 4px;'
+         + 'border-top:1px solid #e5e7eb">BANK DETAILS</td>');
+    s.push('<td colspan="' + sgCols + '" style="border-top:1px solid #e5e7eb"></td>');
+    s.push('</tr>\n');
+
+    // Extra sig rows if bank rows < 2
+    var sigLines = Math.max(bankLen, 2);
+    for (var bi = 0; bi < sigLines; bi++) {
+      var mfb = bankMfs[bi] || null;
+      s.push('<tr>');
+      if (mfb) {
+        s.push('<td style="color:#6b7280;font-size:9.5pt;white-space:nowrap;'
+             + 'padding:3px 8px 3px 4px;vertical-align:top">' + x(n(mfb.key)) + ':</td>');
+        s.push('<td colspan="' + (bkCols - 1) + '" style="color:#111827;font-size:9.5pt;'
+             + 'padding:3px 4px;vertical-align:top;mso-number-format:\'\\@\'">' + fv(mfb.key) + '</td>');
+      } else {
+        s.push('<td colspan="' + bkCols + '"></td>');
+      }
+      // Signature column
+      if (bi === 0 && prepVal) {
+        s.push('<td colspan="' + sgCols + '" style="text-align:right;color:#374151;'
+             + 'font-size:9.5pt;padding:4px 8px;vertical-align:bottom">'
+             + 'Prepared by: <strong>' + x(prepVal) + '</strong></td>');
+      } else if (bi === sigLines - 1) {
+        s.push('<td colspan="' + sgCols + '" style="text-align:right;color:#6b7280;'
+             + 'font-size:8.5pt;padding:20px 8px 4px;border-top:1px solid #1a1d26;'
+             + 'vertical-align:bottom">Authorized Signature(s)</td>');
+      } else {
+        s.push('<td colspan="' + sgCols + '"></td>');
+      }
+      s.push('</tr>\n');
+    }
+  }
+
+  s.push('</table>\n</body></html>');
+
+  var html = s.join('');
+  var blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  var _invNo = (row['invoice_no'] ? String(row['invoice_no']).trim() : '').replace(/[^\w\-]+/g, '_');
+  a.download = 'Invoice_' + (_invNo || String(PRINT_BOOT.scopeKey || 'sheet').replace(/[^\w\-]+/g, '_')) +
+               '_' + PRINT_BOOT._ragicId + '.xls';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('已下载 Excel 文件');
+}
+
+// ============ LOG ============
+function logPrintAction(status, format) {
+  if (!PRINT_BOOT.urls || !PRINT_BOOT.urls.saveLog) return;
+  var docType = (PRINT_BOOT.docType || '').toUpperCase();
+  var invNo   = String(row['invoice_no'] || PRINT_BOOT._ragicId || '');
+  var remark  = format + (docType ? ' [' + docType + ']' : '') + (invNo ? ' ' + invNo : '');
+  var fd = new FormData();
+  fd.append('__token__', PRINT_BOOT.__token__ || '');
+  fd.append('refno',  invNo);
+  fd.append('status', String(status));
+  fd.append('remark', remark);
+  fetch(PRINT_BOOT.urls.saveLog, { method: 'POST', body: fd, credentials: 'same-origin' })
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if (j && j.data && j.data.__token__) PRINT_BOOT.__token__ = j.data.__token__; })
+    .catch(function(){});
+}
+
+// ============ UTILS ============
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+document.getElementById('saveTemplateModal').addEventListener('click', function(e) { if (e.target===this) closeModal(); });
+document.addEventListener('keydown', function(e) { if (e.key==='Escape') closeModal(); });
+
+// Event delegation: handles data-action="showSaveModal" on any dynamically-created button
+document.addEventListener('click', function(e) {
+  var el = e.target;
+  for (var i = 0; i < 5 && el && el !== document.body; i++, el = el.parentNode) {
+    if (el.getAttribute && el.getAttribute('data-action') === 'showSaveModal') {
+      showSaveModal();
+      return;
+    }
+  }
+});
+
+init();
+
+// ============ 打印后清理（兜底）============
+window.addEventListener('afterprint', function() {
+  var pr = document.getElementById('printRoot');
+  if (pr) pr.innerHTML = '';
+});
+</script>
+
+<!-- 打印专用根节点（body 直接子元素，CSS 打印时只显示此节点） -->
+<div id="printRoot"></div>
+</body>
+</html>
